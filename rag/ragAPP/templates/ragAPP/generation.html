@@ -1,0 +1,292 @@
+{% extends 'ragAPP/base.html' %}
+
+{% block title %}Generation - RAG Pipeline{% endblock %}
+
+{% block nav_extra %}
+<span class="navbar-text">
+  <i class="bi bi-cpu"></i> Generation
+</span>
+{% endblock %}
+
+{% block content %}
+<!-- Step Header -->
+<div class="row mb-4">
+  <div class="col-12">
+    <div class="card step-card shadow-sm">
+      <div class="card-header">
+        <h4 class="mb-0" style="color: white;">
+          <i class="bi bi-cpu"></i> RAG Demo – Step 7: Generation
+        </h4>
+        <small style="color: rgba(255, 255, 255, 0.8);">LLM processes augmented prompt and generates final response</small>
+      </div>
+      <div class="card-body">
+        {% if not has_stored_vectors %}
+        <!-- No Vectors Warning -->
+        <div class="alert alert-warning">
+          <i class="bi bi-exclamation-triangle"></i>
+          <strong>No vectors in storage!</strong> Please go to <a href="{% url 'vector_storage' %}">Vector Storage</a> and add some vectors first to see the generation demo.
+        </div>
+        {% else %}
+        <!-- Statistics -->
+        <div class="row mb-4">
+          <div class="col-md-6">
+            <div class="card border-0 bg-light">
+              <div class="card-body text-center">
+                <h5 class="text-muted">Context Chunks Used</h5>
+                <h3 class="step-title">{{ retrieved_chunks|length }}</h3>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="card border-0 bg-light">
+              <div class="card-body text-center">
+                <h5 class="text-muted">Generation Status</h5>
+                <h3 class="step-title">Complete</h3>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 1: Augmented Prompt Input -->
+        <div class="row mb-4">
+          <div class="col-12">
+            <div class="card border-primary shadow-sm">
+              <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                  <i class="bi bi-1-circle"></i> Augmented Prompt Sent to LLM
+                </h5>
+              </div>
+              <div class="card-body">
+                <p class="mb-3"><strong>Complete prompt with user query and retrieved context:</strong></p>
+                
+                <div class="card bg-light border-0">
+                  <div class="card-body">
+                    <h6 class="text-muted mb-2">Input to Language Model:</h6>
+                    <div class="bg-white p-3 rounded border" style="font-family: 'Courier New', monospace; font-size: 0.85em; line-height: 1.4; max-height: 300px; overflow-y: auto;">
+                      <pre style="margin: 0; white-space: pre-wrap;">{{ augmented_prompt }}</pre>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="alert alert-info mt-3">
+                  <i class="bi bi-arrow-right"></i>
+                  <strong>Prompt Ready!</strong> Sending to LLM for processing...
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Flow Arrow -->
+        <div class="row mb-4">
+          <div class="col-12 text-center">
+            <i class="bi bi-arrow-down" style="font-size: 2rem; color: #6c757d;"></i>
+          </div>
+        </div>
+
+        <!-- Step 2: LLM Processing -->
+        <div class="row mb-4">
+          <div class="col-12">
+            <div class="card border-warning shadow-sm">
+              <div class="card-header bg-warning text-white">
+                <h5 class="mb-0">
+                  <i class="bi bi-2-circle"></i> LLM Processing
+                </h5>
+              </div>
+              <div class="card-body">
+                <div class="row">
+                  <div class="col-md-8">
+                    <p><strong>Language Model is analyzing the prompt...</strong></p>
+                    <ul class="list-unstyled">
+                      <li><i class="bi bi-check-circle text-success"></i> Understanding user question</li>
+                      <li><i class="bi bi-check-circle text-success"></i> Processing retrieved context</li>
+                      <li><i class="bi bi-check-circle text-success"></i> Synthesizing information</li>
+                      <li><i class="bi bi-check-circle text-success"></i> Generating coherent response</li>
+                    </ul>
+                  </div>
+                  <div class="col-md-4">
+                    <div class="text-center">
+                      <div class="spinner-border text-warning" role="status" style="width: 3rem; height: 3rem;">
+                        <span class="visually-hidden">Processing...</span>
+                      </div>
+                      <p class="mt-2 text-muted">LLM Thinking...</p>
+                      <div class="typing-animation">
+                        <span class="dot"></span>
+                        <span class="dot"></span>
+                        <span class="dot"></span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Flow Arrow -->
+        <div class="row mb-4">
+          <div class="col-12 text-center">
+            <i class="bi bi-arrow-down" style="font-size: 2rem; color: #6c757d;"></i>
+          </div>
+        </div>
+
+        <!-- Step 3: Generated Response -->
+        <div class="row mb-4">
+          <div class="col-12">
+            <div class="card border-success shadow-sm">
+              <div class="card-header bg-success text-white">
+                <h5 class="mb-0">
+                  <i class="bi bi-3-circle"></i> Final Generated Answer
+                </h5>
+              </div>
+              <div class="card-body">
+                <p class="mb-3"><strong>LLM Response based on augmented context:</strong></p>
+                
+                <!-- Chat-style response bubble -->
+                <div class="card bg-light border-0 mb-4">
+                  <div class="card-body">
+                    <div class="d-flex align-items-start">
+                      <div class="flex-shrink-0 me-3">
+                        <div class="bg-success rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                          <i class="bi bi-robot text-white"></i>
+                        </div>
+                      </div>
+                      <div class="flex-grow-1">
+                        <h6 class="mb-2 text-success">AI Assistant</h6>
+                        <div class="bg-white p-3 rounded border shadow-sm" style="line-height: 1.6;">
+                          <p style="margin: 0; white-space: pre-line;">{{ llm_response }}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- Response Analysis -->
+                <div class="row">
+                  <div class="col-md-4">
+                    <div class="text-center p-3 bg-light rounded">
+                      <i class="bi bi-check-circle-fill text-success" style="font-size: 2rem;"></i>
+                      <h6 class="mt-2">Contextual</h6>
+                      <small class="text-muted">Uses retrieved information</small>
+                    </div>
+                  </div>
+                  <div class="col-md-4">
+                    <div class="text-center p-3 bg-light rounded">
+                      <i class="bi bi-shield-check text-success" style="font-size: 2rem;"></i>
+                      <h6 class="mt-2">Accurate</h6>
+                      <small class="text-muted">Grounded in source material</small>
+                    </div>
+                  </div>
+                  <div class="col-md-4">
+                    <div class="text-center p-3 bg-light rounded">
+                      <i class="bi bi-chat-dots text-success" style="font-size: 2rem;"></i>
+                      <h6 class="mt-2">Coherent</h6>
+                      <small class="text-muted">Well-structured response</small>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="alert alert-success mt-4">
+                  <i class="bi bi-check-circle"></i>
+                  <strong>Generation Complete!</strong> The RAG pipeline has successfully generated a contextually-aware, accurate response using retrieved knowledge.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pipeline Summary -->
+        <div class="row mb-4">
+          <div class="col-12">
+            <div class="card border-info shadow-sm">
+              <div class="card-header bg-info text-white">
+                <h5 class="mb-0">
+                  <i class="bi bi-diagram-3"></i> Complete RAG Pipeline Summary
+                </h5>
+              </div>
+              <div class="card-body">
+                <div class="row text-center">
+                  <div class="col-md-2">
+                    <i class="bi bi-file-text text-primary" style="font-size: 2rem;"></i>
+                    <h6 class="mt-2">Parse</h6>
+                    <small class="text-muted">Input processing</small>
+                  </div>
+                  <div class="col-md-1 d-flex align-items-center justify-content-center">
+                    <i class="bi bi-arrow-right text-muted"></i>
+                  </div>
+                  <div class="col-md-2">
+                    <i class="bi bi-scissors text-warning" style="font-size: 2rem;"></i>
+                    <h6 class="mt-2">Chunk</h6>
+                    <small class="text-muted">Text segmentation</small>
+                  </div>
+                  <div class="col-md-1 d-flex align-items-center justify-content-center">
+                    <i class="bi bi-arrow-right text-muted"></i>
+                  </div>
+                  <div class="col-md-2">
+                    <i class="bi bi-vector-pen text-info" style="font-size: 2rem;"></i>
+                    <h6 class="mt-2">Embed</h6>
+                    <small class="text-muted">Vector conversion</small>
+                  </div>
+                  <div class="col-md-1 d-flex align-items-center justify-content-center">
+                    <i class="bi bi-arrow-right text-muted"></i>
+                  </div>
+                  <div class="col-md-3">
+                    <i class="bi bi-cpu text-success" style="font-size: 2rem;"></i>
+                    <h6 class="mt-2">Generate</h6>
+                    <small class="text-muted">LLM response</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Navigation -->
+<div class="row">
+  <div class="col-12">
+    <div class="d-flex justify-content-between">
+      <a href="{% url 'augmentation' %}" class="btn btn-outline-primary">
+        <i class="bi bi-arrow-left"></i> Previous: Augmentation
+      </a>
+      <a href="{% url 'home' %}" class="btn btn-success">
+        <i class="bi bi-check-circle"></i> Pipeline Complete!
+      </a>
+    </div>
+  </div>
+</div>
+
+<style>
+.typing-animation {
+  display: flex;
+  justify-content: center;
+  margin-top: 10px;
+}
+
+.dot {
+  height: 8px;
+  width: 8px;
+  margin: 0 2px;
+  background-color: #ffc107;
+  border-radius: 50%;
+  display: inline-block;
+  animation: typing 1.4s infinite ease-in-out both;
+}
+
+.dot:nth-child(1) { animation-delay: -0.32s; }
+.dot:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes typing {
+  0%, 80%, 100% {
+    transform: scale(0);
+  }
+  40% {
+    transform: scale(1);
+  }
+}
+</style>
+{% endblock %}

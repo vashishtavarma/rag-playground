@@ -1,0 +1,120 @@
+{% extends 'ragAPP/base.html' %}
+
+{% block title %}RAG Pipeline - Home{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="row mb-5">
+  <div class="col-12 text-center">
+    <h1 class="display-5 step-title mb-4">Pipeline Components</h1>
+  </div>
+</div>
+
+<!-- Pipeline Steps Cards -->
+<div class="row g-4">
+        <!-- Input Parsing -->
+        <div class="col-lg-4 col-md-6">
+          <a href="{% url 'input_parsing' %}" class="text-decoration-none">
+            <div class="card h-100 card-hover step-card">
+              <div class="card-body text-center p-4">
+                <div class="mb-3">
+                  <i class="bi bi-file-earmark-text step-icon"></i>
+                </div>
+                <h5 class="step-title mb-3">Input Parsing</h5>
+                <div class="badge step-badge">01</div>
+              </div>
+            </div>
+          </a>
+        </div>
+
+        <!-- Chunking -->
+        <div class="col-lg-4 col-md-6">
+          <a href="{% url 'chunking' %}" class="text-decoration-none">
+            <div class="card h-100 card-hover step-card">
+              <div class="card-body text-center p-4">
+                <div class="mb-3">
+                  <i class="bi bi-scissors step-icon"></i>
+                </div>
+                <h5 class="step-title mb-3">Chunking</h5>
+                <div class="badge step-badge">02</div>
+              </div>
+            </div>
+          </a>
+        </div>
+
+        <!-- Vector Embedding -->
+        <div class="col-lg-4 col-md-6">
+          <a href="{% url 'vector_embedding' %}" class="text-decoration-none">
+            <div class="card h-100 card-hover step-card">
+              <div class="card-body text-center p-4">
+                <div class="mb-3">
+                  <i class="bi bi-vector-pen step-icon"></i>
+                </div>
+                <h5 class="step-title mb-3">Vector Embedding</h5>
+                <div class="badge step-badge">03</div>
+              </div>
+            </div>
+          </a>
+        </div>
+
+        <!-- Vector Storage -->
+        <div class="col-lg-4 col-md-6">
+          <a href="{% url 'vector_storage' %}" class="text-decoration-none">
+            <div class="card h-100 card-hover step-card">
+              <div class="card-body text-center p-4">
+                <div class="mb-3">
+                  <i class="bi bi-database step-icon"></i>
+                </div>
+                <h5 class="step-title mb-3">Vector Storage</h5>
+                <div class="badge step-badge">04</div>
+              </div>
+            </div>
+          </a>
+        </div>
+
+        <!-- Retrieval -->
+        <div class="col-lg-4 col-md-6">
+          <a href="{% url 'retrieval' %}" class="text-decoration-none">
+            <div class="card h-100 card-hover step-card">
+              <div class="card-body text-center p-4">
+                <div class="mb-3">
+                  <i class="bi bi-search step-icon"></i>
+                </div>
+                <h5 class="step-title mb-3">Retrieval</h5>
+                <div class="badge step-badge">05</div>
+              </div>
+            </div>
+          </a>
+        </div>
+
+        <!-- Augmentation -->
+        <div class="col-lg-4 col-md-6">
+          <a href="{% url 'augmentation' %}" class="text-decoration-none">
+            <div class="card h-100 card-hover step-card">
+              <div class="card-body text-center p-4">
+                <div class="mb-3">
+                  <i class="bi bi-plus-circle step-icon"></i>
+                </div>
+                <h5 class="step-title mb-3">Augmentation</h5>
+                <div class="badge step-badge">06</div>
+              </div>
+            </div>
+          </a>
+        </div>
+
+        <!-- Generation -->
+        <div class="col-lg-4 col-md-6 mx-auto">
+          <a href="{% url 'generation' %}" class="text-decoration-none">
+            <div class="card h-100 card-hover step-card">
+              <div class="card-body text-center p-4">
+                <div class="mb-3">
+                  <i class="bi bi-cpu step-icon"></i>
+                </div>
+                <h5 class="step-title mb-3">Generation</h5>
+                <div class="badge step-badge">07</div>
+              </div>
+            </div>
+          </a>
+  </div>
+</div>
+{% endblock %}

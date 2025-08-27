@@ -1,0 +1,236 @@
+{% extends 'ragAPP/base.html' %}
+
+{% block title %}Vector Storage - RAG Pipeline{% endblock %}
+
+{% block nav_extra %}
+<span class="navbar-text">
+  <i class="bi bi-database"></i> Vector Storage
+</span>
+{% endblock %}
+
+{% block content %}
+<!-- Step Header -->
+<div class="row mb-4">
+  <div class="col-12">
+    <div class="card step-card shadow-sm">
+      <div class="card-header">
+        <h4 class="mb-0" style="color: white;">
+          <i class="bi bi-database"></i> RAG Demo – Step 4: Vector Storage
+        </h4>
+        <small style="color: rgba(255, 255, 255, 0.8);">Complete pipeline: Parse → Clean → Chunk → Embed → Store</small>
+      </div>
+      <div class="card-body">
+        <!-- Messages -->
+        {% if message %}
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+          {{ message }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endif %}
+        
+        {% if error %}
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+          {{ error }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endif %}
+
+        <!-- Storage Statistics -->
+        <div class="row mb-4">
+          <div class="col-md-6">
+            <div class="card border-0 bg-light">
+              <div class="card-body text-center">
+                <h5 class="text-muted">Total Vectors Stored</h5>
+                <h3 class="step-title">{{ total_vectors }}</h3>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="card border-0 bg-light">
+              <div class="card-body text-center">
+                <h5 class="text-muted">Pipeline Status</h5>
+                <h3 class="step-title">Complete Demo</h3>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Complete Pipeline Form -->
+        <form method="post" enctype="multipart/form-data" class="mb-4">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="process_text">
+          <input type="hidden" name="input_method" id="inputMethodHidden" value="{{ input_method|default:'file' }}">
+          
+          <!-- Input Method Selection -->
+          <div class="row mb-3">
+            <div class="col-12">
+              <h5 class="step-title mb-3">
+                <i class="bi bi-gear"></i> Complete RAG Pipeline Demo
+              </h5>
+              <label for="inputMethod" class="form-label fw-bold">Input Method</label>
+              <select class="form-select" id="inputMethod" onchange="toggleInputMethod()">
+                <option value="file" {% if input_method == 'file' %}selected{% endif %}>Upload File (TXT or PDF)</option>
+                <option value="text" {% if input_method == 'text' %}selected{% endif %}>Paste Text Manually</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- File Upload -->
+          <div class="row mb-3" id="fileInputSection">
+            <div class="col-12">
+              <label for="fileInput" class="form-label">
+                <i class="bi bi-cloud-upload"></i> Select File
+              </label>
+              <input type="file" class="form-control" id="fileInput" name="file" accept=".txt, .pdf">
+            </div>
+          </div>
+
+          <!-- Text Input -->
+          <div class="row mb-3" id="textInputSection">
+            <div class="col-12">
+              <label for="textInput" class="form-label">
+                <i class="bi bi-textarea-t"></i> Paste Your Text
+              </label>
+              <textarea class="form-control" id="textInput" name="text_input" rows="6" placeholder="Paste your text here...">{{ request.POST.text_input|default:"" }}</textarea>
+            </div>
+          </div>
+
+          <!-- Pipeline Info -->
+          <div class="row mb-3">
+            <div class="col-12">
+              <div class="alert alert-info">
+                <i class="bi bi-info-circle"></i>
+                <strong>Pipeline Steps:</strong> 
+                1. Parse input → 2. Clean text → 3. Create chunks (200 chars, 50 overlap) → 4. Generate random embeddings (384D) → 5. Store in vector DB
+              </div>
+            </div>
+          </div>
+
+          <!-- Submit Button -->
+          <div class="row mb-4">
+            <div class="col-12">
+              <button class="btn btn-primary w-100" type="submit">
+                <i class="bi bi-play-circle"></i> Run Complete Pipeline & Store Vectors
+              </button>
+            </div>
+          </div>
+        </form>
+
+        <!-- Clear Action -->
+        <div class="row mb-4">
+          <div class="col-12">
+            <form method="post" class="d-inline">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="clear_all">
+              <button type="submit" class="btn btn-danger w-100" 
+                      onclick="return confirm('Are you sure you want to clear all vectors?')">
+                <i class="bi bi-trash"></i> Clear All Stored Vectors
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <!-- Stored Vectors Display -->
+        {% if stored_vectors %}
+        <div class="row">
+          <div class="col-12">
+            <h5 class="step-title mb-3">
+              <i class="bi bi-collection"></i> Stored Vectors ({{ total_vectors }} total)
+            </h5>
+          </div>
+        </div>
+        
+        <div class="row g-3">
+          {% for vector in stored_vectors %}
+          <div class="col-12">
+            <div class="card border-0 shadow-sm">
+              <div class="card-header">
+                <h6 class="mb-0" style="color: white;">
+                  <i class="bi bi-vector-pen"></i> Vector ID: {{ vector.id }}
+                </h6>
+                <small style="color: rgba(255, 255, 255, 0.8);">{{ vector.dimensions }} dimensions</small>
+              </div>
+              <div class="card-body">
+                <div class="row">
+                  <div class="col-md-2">
+                    <h6 class="text-muted mb-2">Vector ID:</h6>
+                    <p class="fw-bold">{{ vector.id }}</p>
+                  </div>
+                  <div class="col-md-2">
+                    <h6 class="text-muted mb-2">Dimensions:</h6>
+                    <p class="fw-bold">{{ vector.dimensions }}</p>
+                  </div>
+                  <div class="col-md-4">
+                    <h6 class="text-muted mb-2">Original Text:</h6>
+                    <p class="card-text" style="font-size: 0.9em; line-height: 1.4; max-height: 100px; overflow-y: auto;">{{ vector.text }}</p>
+                  </div>
+                  <div class="col-md-4">
+                    <h6 class="text-muted mb-2">Embedding Values:</h6>
+                    <div class="bg-light p-2 rounded" style="font-family: 'Courier New', monospace; font-size: 0.8em; max-height: 100px; overflow-y: auto;">
+                      [{{ vector.embedding|join:", " }}]
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        
+        {% else %}
+        <!-- Empty State -->
+        <div class="alert alert-info">
+          <i class="bi bi-info-circle"></i>
+          <strong>No vectors stored yet.</strong> Upload a file or paste text to run the complete pipeline and see stored vectors here.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Navigation -->
+<div class="row">
+  <div class="col-12">
+    <div class="d-flex justify-content-between">
+      <a href="{% url 'vector_embedding' %}" class="btn btn-outline-primary">
+        <i class="bi bi-arrow-left"></i> Previous: Vector Embedding
+      </a>
+      <a href="{% url 'retrieval' %}" class="btn btn-primary">
+        Next Step: Retrieval <i class="bi bi-arrow-right"></i>
+      </a>
+    </div>
+  </div>
+</div>
+
+<script>
+function toggleInputMethod() {
+  const inputMethod = document.getElementById('inputMethod').value;
+  const fileSection = document.getElementById('fileInputSection');
+  const textSection = document.getElementById('textInputSection');
+  const hiddenInput = document.getElementById('inputMethodHidden');
+
+  // Update hidden input
+  hiddenInput.value = inputMethod;
+
+  // Hide all sections first
+  fileSection.style.display = 'none';
+  textSection.style.display = 'none';
+
+  // Show the selected section
+  if (inputMethod === 'file') {
+    fileSection.style.display = 'block';
+  } else if (inputMethod === 'text') {
+    textSection.style.display = 'block';
+  }
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+  // Set initial state based on server-side value
+  const savedMethod = document.getElementById('inputMethodHidden').value;
+  document.getElementById('inputMethod').value = savedMethod;
+  toggleInputMethod();
+});
+</script>
+{% endblock %}

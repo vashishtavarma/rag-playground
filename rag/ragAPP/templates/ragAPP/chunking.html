@@ -1,0 +1,197 @@
+{% extends 'ragAPP/base.html' %}
+
+{% block title %}Chunking - RAG Pipeline{% endblock %}
+
+{% block nav_extra %}
+<span class="navbar-text">
+  <i class="bi bi-scissors"></i> Chunking
+</span>
+{% endblock %}
+
+{% block content %}
+<!-- Step Header -->
+<div class="row mb-4">
+  <div class="col-12">
+    <div class="card step-card shadow-sm">
+      <div class="card-header">
+        <h4 class="mb-0" style="color: white;">
+          <i class="bi bi-scissors"></i> RAG Demo – Step 2: Chunking
+        </h4>
+        <small style="color: rgba(255, 255, 255, 0.8);">Split text into smaller, manageable chunks with customizable size and overlap</small>
+      </div>
+      <div class="card-body">
+        <!-- Input Form -->
+        <form method="post" enctype="multipart/form-data" class="mb-4">
+          {% csrf_token %}
+          <input type="hidden" name="input_method" id="inputMethodHidden" value="{{ request.POST.input_method|default:'file' }}">
+          
+          <!-- Input Method Selection -->
+          <div class="row mb-3">
+            <div class="col-12">
+              <label for="inputMethod" class="form-label fw-bold">Input Method</label>
+              <select class="form-select" id="inputMethod" onchange="toggleInputMethod()">
+                <option value="file" {% if request.POST.input_method == 'file' or not request.POST %}selected{% endif %}>Upload File (TXT or PDF)</option>
+                <option value="text" {% if request.POST.input_method == 'text' %}selected{% endif %}>Paste Text Manually</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- File Upload -->
+          <div class="row mb-3" id="fileInputSection">
+            <div class="col-12">
+              <label for="fileInput" class="form-label">
+                <i class="bi bi-cloud-upload"></i> Select File
+              </label>
+              <input type="file" class="form-control" id="fileInput" name="file" accept=".txt, .pdf">
+            </div>
+          </div>
+
+          <!-- Text Input -->
+          <div class="row mb-3" id="textInputSection">
+            <div class="col-12">
+              <label for="textInput" class="form-label">
+                <i class="bi bi-textarea-t"></i> Paste Your Text
+              </label>
+              <textarea class="form-control" id="textInput" name="text_input" rows="6" placeholder="Paste your text here...">{{ request.POST.text_input|default:"" }}</textarea>
+            </div>
+          </div>
+
+          <!-- Chunking Parameters -->
+          <div class="row mb-4">
+            <div class="col-md-6">
+              <label for="chunkSize" class="form-label">
+                <i class="bi bi-scissors"></i> Chunk Size (characters)
+              </label>
+              <input type="number" class="form-control" id="chunkSize" name="chunk_size" value="{{ chunk_size|default:200 }}" min="50" max="1000">
+            </div>
+            <div class="col-md-6">
+              <label for="overlapSize" class="form-label">
+                <i class="bi bi-arrow-left-right"></i> Overlap Size (characters)
+              </label>
+              <input type="number" class="form-control" id="overlapSize" name="overlap_size" value="{{ overlap_size|default:50 }}" min="0" max="200">
+            </div>
+          </div>
+
+          <!-- Submit Button -->
+          <div class="row">
+            <div class="col-12">
+              <button class="btn btn-primary w-100" type="submit">
+                <i class="bi bi-play-circle"></i> Process and Chunk Text
+              </button>
+            </div>
+          </div>
+        </form>
+
+        {% if chunks %}
+        <!-- Results Section -->
+        <hr class="my-4">
+        
+        <!-- Statistics -->
+        <div class="row mb-4">
+          <div class="col-md-4">
+            <div class="card border-0 bg-light">
+              <div class="card-body text-center">
+                <h5 class="text-muted">Original Text Length</h5>
+                <h3 class="step-title">{{ original_length }} chars</h3>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="card border-0 bg-light">
+              <div class="card-body text-center">
+                <h5 class="text-muted">Total Chunks Created</h5>
+                <h3 class="step-title">{{ total_chunks }}</h3>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="card border-0 bg-light">
+              <div class="card-body text-center">
+                <h5 class="text-muted">Chunk Size / Overlap</h5>
+                <h3 class="step-title">{{ chunk_size }} / {{ overlap_size }}</h3>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chunks Display -->
+        <div class="row">
+          <div class="col-12">
+            <h5 class="step-title mb-3">
+              <i class="bi bi-collection"></i> Generated Chunks
+            </h5>
+          </div>
+        </div>
+        
+        <div class="row g-3">
+          {% for chunk in chunks %}
+          <div class="col-lg-6 col-xl-4">
+            <div class="card border-0 shadow-sm">
+              <div class="card-header">
+                <h6 class="mb-0" style="color: white;">
+                  <i class="bi bi-file-text"></i> Chunk #{{ forloop.counter }}
+                </h6>
+                <small style="color: rgba(255, 255, 255, 0.8);">{{ chunk|length }} characters</small>
+              </div>
+              <div class="card-body">
+                <p class="card-text" style="font-size: 0.9em; line-height: 1.4;">{{ chunk }}</p>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        
+        {% else %}
+        <!-- Instructions -->
+        <div class="alert alert-primary">
+          <i class="bi bi-info-circle"></i>
+          <strong>Instructions:</strong> Upload a file or paste text, then adjust chunk size and overlap parameters to see how text is split into manageable pieces.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Navigation -->
+<div class="row">
+  <div class="col-12">
+    <div class="d-flex justify-content-between">
+      <a href="{% url 'home' %}" class="btn btn-outline-primary">
+        <i class="bi bi-arrow-left"></i> Back to Pipeline Overview
+      </a>
+      <a href="{% url 'vector_embedding' %}" class="btn btn-primary">
+        Next Step: Vector Embedding <i class="bi bi-arrow-right"></i>
+      </a>
+    </div>
+  </div>
+</div>
+
+    <script>
+      function toggleInputMethod() {
+        const inputMethod = document.getElementById('inputMethod').value;
+        const fileSection = document.getElementById('fileInputSection');
+        const textSection = document.getElementById('textInputSection');
+        const hiddenInput = document.getElementById('inputMethodHidden');
+
+        // Update hidden input
+        hiddenInput.value = inputMethod;
+
+        if (inputMethod === 'file') {
+          fileSection.style.display = 'block';
+          textSection.style.display = 'none';
+        } else if (inputMethod === 'text') {
+          fileSection.style.display = 'none';
+          textSection.style.display = 'block';
+        }
+      }
+
+      // Initialize on page load
+      document.addEventListener('DOMContentLoaded', function() {
+        // Set initial state based on server-side value
+        const savedMethod = document.getElementById('inputMethodHidden').value;
+        document.getElementById('inputMethod').value = savedMethod;
+        toggleInputMethod();
+      });
+    </script>
+{% endblock %}

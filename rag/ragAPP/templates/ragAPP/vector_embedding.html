@@ -1,0 +1,219 @@
+{% extends 'ragAPP/base.html' %}
+
+{% block title %}Vector Embedding - RAG Pipeline{% endblock %}
+
+{% block nav_extra %}
+<span class="navbar-text">
+  <i class="bi bi-vector-pen"></i> Vector Embedding
+</span>
+{% endblock %}
+
+{% block content %}
+<!-- Step Header -->
+<div class="row mb-4">
+  <div class="col-12">
+    <div class="card step-card shadow-sm">
+      <div class="card-header">
+        <h4 class="mb-0" style="color: white;">
+          <i class="bi bi-vector-pen"></i> RAG Demo – Step 3: Vector Embedding
+        </h4>
+        <small style="color: rgba(255, 255, 255, 0.8);">Convert text chunks into high-dimensional vector representations</small>
+      </div>
+      <div class="card-body">
+        <!-- Input Form -->
+        <form method="post" enctype="multipart/form-data" class="mb-4">
+          {% csrf_token %}
+          <input type="hidden" name="input_method" id="inputMethodHidden" value="{{ request.POST.input_method|default:'file' }}">
+          
+          <!-- Input Method Selection -->
+          <div class="row mb-3">
+            <div class="col-12">
+              <label for="inputMethod" class="form-label fw-bold">Input Method</label>
+              <select class="form-select" id="inputMethod" onchange="toggleInputMethod()">
+                <option value="file" {% if request.POST.input_method == 'file' or not request.POST %}selected{% endif %}>Upload File (TXT or PDF)</option>
+                <option value="text" {% if request.POST.input_method == 'text' %}selected{% endif %}>Paste Text Manually</option>
+                <option value="lines" {% if request.POST.input_method == 'lines' %}selected{% endif %}>Multiple Lines (Each line = Chunk)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- File Upload -->
+          <div class="row mb-3" id="fileInputSection">
+            <div class="col-12">
+              <label for="fileInput" class="form-label">
+                <i class="bi bi-cloud-upload"></i> Select File
+              </label>
+              <input type="file" class="form-control" id="fileInput" name="file" accept=".txt, .pdf">
+            </div>
+          </div>
+
+          <!-- Text Input -->
+          <div class="row mb-3" id="textInputSection">
+            <div class="col-12">
+              <label for="textInput" class="form-label">
+                <i class="bi bi-textarea-t"></i> Paste Your Text
+              </label>
+              <textarea class="form-control" id="textInput" name="text_input" rows="6" placeholder="Paste your text here...">{{ request.POST.text_input|default:"" }}</textarea>
+            </div>
+          </div>
+
+          <!-- Lines Input -->
+          <div class="row mb-3" id="linesInputSection">
+            <div class="col-12">
+              <label for="linesInput" class="form-label">
+                <i class="bi bi-list-ol"></i> Enter Text (Each line becomes a chunk)
+              </label>
+              <textarea class="form-control" id="linesInput" name="lines_input" rows="8" placeholder="Line 1: First chunk of text&#10;Line 2: Second chunk of text&#10;Line 3: Third chunk of text">{{ request.POST.lines_input|default:"" }}</textarea>
+            </div>
+          </div>
+
+          <!-- Embedding Model Info -->
+          <div class="row mb-4">
+            <div class="col-md-12">
+              <div class="alert alert-info">
+                <i class="bi bi-cpu"></i> <strong>Embedding Model:</strong> BAAI/bge-small-en (384 dimensions)
+              </div>
+            </div>
+          </div>
+
+          <!-- Submit Button -->
+          <div class="row">
+            <div class="col-12">
+              <button class="btn btn-primary w-100" type="submit">
+                <i class="bi bi-play-circle"></i> Generate Vector Embeddings
+              </button>
+            </div>
+          </div>
+        </form>
+
+        {% if embeddings %}
+        <!-- Results Section -->
+        <hr class="my-4">
+        
+        <!-- Statistics -->
+        <div class="row mb-4">
+          <div class="col-md-4">
+            <div class="card border-0 bg-light">
+              <div class="card-body text-center">
+                <h5 class="text-muted">Total Chunks</h5>
+                <h3 class="step-title">{{ total_chunks }}</h3>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="card border-0 bg-light">
+              <div class="card-body text-center">
+                <h5 class="text-muted">Vector Dimensions</h5>
+                <h3 class="step-title">{{ vector_dimensions }}</h3>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="card border-0 bg-light">
+              <div class="card-body text-center">
+                <h5 class="text-muted">Model Used</h5>
+                <h3 class="step-title">{{ model_name }}</h3>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Embeddings Display -->
+        <div class="row">
+          <div class="col-12">
+            <h5 class="step-title mb-3">
+              <i class="bi bi-collection"></i> Generated Embeddings
+            </h5>
+          </div>
+        </div>
+        
+        <div class="row g-3">
+          {% for embedding in embeddings %}
+          <div class="col-12">
+            <div class="card border-0 shadow-sm">
+              <div class="card-header">
+                <h6 class="mb-0" style="color: white;">
+                  <i class="bi bi-file-text"></i> Chunk {{ forloop.counter }}
+                </h6>
+                <small style="color: rgba(255, 255, 255, 0.8);">{{ embedding.text|length }} characters</small>
+              </div>
+              <div class="card-body">
+                <div class="row">
+                  <div class="col-md-6">
+                    <h6 class="text-muted mb-2">Original Text:</h6>
+                    <p class="card-text" style="font-size: 0.9em; line-height: 1.4;">{{ embedding.text }}</p>
+                  </div>
+                  <div class="col-md-6">
+                    <h6 class="text-muted mb-2">Vector Embedding:</h6>
+                    <div class="bg-light p-2 rounded" style="font-family: 'Courier New', monospace; font-size: 0.8em; max-height: 150px; overflow-y: auto;">
+                      [{{ embedding.vector|join:", " }}]
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        
+        {% else %}
+        <!-- Instructions -->
+        <div class="alert alert-primary">
+          <i class="bi bi-info-circle"></i>
+          <strong>Instructions:</strong> Upload a file, paste text, or enter multiple lines to convert text chunks into numerical vector representations.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Navigation -->
+<div class="row">
+  <div class="col-12">
+    <div class="d-flex justify-content-between">
+      <a href="{% url 'chunking' %}" class="btn btn-outline-primary">
+        <i class="bi bi-arrow-left"></i> Previous: Chunking
+      </a>
+      <a href="{% url 'vector_storage' %}" class="btn btn-primary">
+        Next Step: Vector Storage <i class="bi bi-arrow-right"></i>
+      </a>
+    </div>
+  </div>
+</div>
+
+<script>
+function toggleInputMethod() {
+  const inputMethod = document.getElementById('inputMethod').value;
+  const fileSection = document.getElementById('fileInputSection');
+  const textSection = document.getElementById('textInputSection');
+  const linesSection = document.getElementById('linesInputSection');
+  const hiddenInput = document.getElementById('inputMethodHidden');
+
+  // Update hidden input
+  hiddenInput.value = inputMethod;
+
+  // Hide all sections first
+  fileSection.style.display = 'none';
+  textSection.style.display = 'none';
+  linesSection.style.display = 'none';
+
+  // Show the selected section
+  if (inputMethod === 'file') {
+    fileSection.style.display = 'block';
+  } else if (inputMethod === 'text') {
+    textSection.style.display = 'block';
+  } else if (inputMethod === 'lines') {
+    linesSection.style.display = 'block';
+  }
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+  // Set initial state based on server-side value
+  const savedMethod = document.getElementById('inputMethodHidden').value;
+  document.getElementById('inputMethod').value = savedMethod;
+  toggleInputMethod();
+});
+</script>
+{% endblock %}

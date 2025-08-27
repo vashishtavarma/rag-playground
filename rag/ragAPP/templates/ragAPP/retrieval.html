@@ -1,0 +1,215 @@
+{% extends 'ragAPP/base.html' %}
+
+{% block title %}Retrieval - RAG Pipeline{% endblock %}
+
+{% block nav_extra %}
+<span class="navbar-text">
+  <i class="bi bi-search"></i> Retrieval
+</span>
+{% endblock %}
+
+{% block content %}
+<!-- Step Header -->
+<div class="row mb-4">
+  <div class="col-12">
+    <div class="card step-card shadow-sm">
+      <div class="card-header">
+        <h4 class="mb-0" style="color: white;">
+          <i class="bi bi-search"></i> RAG Demo – Step 5: Retrieval
+        </h4>
+        <small style="color: rgba(255, 255, 255, 0.8);">Query processing and similarity search demonstration</small>
+      </div>
+      <div class="card-body">
+        {% if not has_stored_vectors %}
+        <!-- No Vectors Warning -->
+        <div class="alert alert-warning">
+          <i class="bi bi-exclamation-triangle"></i>
+          <strong>No vectors in storage!</strong> Please go to <a href="{% url 'vector_storage' %}">Vector Storage</a> and add some vectors first to see the retrieval demo.
+        </div>
+        {% else %}
+        <!-- Statistics -->
+        <div class="row mb-4">
+          <div class="col-md-6">
+            <div class="card border-0 bg-light">
+              <div class="card-body text-center">
+                <h5 class="text-muted">Vectors in Database</h5>
+                <h3 class="step-title">{{ total_stored_vectors }}</h3>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="card border-0 bg-light">
+              <div class="card-body text-center">
+                <h5 class="text-muted">Retrieved Results</h5>
+                <h3 class="step-title">{{ retrieved_chunks|length }}</h3>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 1: User Query -->
+        <div class="row mb-4">
+          <div class="col-12">
+            <div class="card border-primary shadow-sm">
+              <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                  <i class="bi bi-1-circle"></i> User Query
+                </h5>
+              </div>
+              <div class="card-body">
+                <div class="text-center">
+                  <h4 class="text-primary">"{{ demo_query }}"</h4>
+                  <p class="text-muted">User asks a question that needs to be answered using stored knowledge</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Flow Arrow -->
+        <div class="row mb-4">
+          <div class="col-12 text-center">
+            <i class="bi bi-arrow-down" style="font-size: 2rem; color: #6c757d;"></i>
+          </div>
+        </div>
+
+        <!-- Step 2: Query Embedding -->
+        <div class="row mb-4">
+          <div class="col-12">
+            <div class="card border-success shadow-sm">
+              <div class="card-header bg-success text-white">
+                <h5 class="mb-0">
+                  <i class="bi bi-2-circle"></i> Query Embedding
+                </h5>
+              </div>
+              <div class="card-body">
+                <p class="mb-2"><strong>Convert query to 384-dimensional vector:</strong></p>
+                <div class="bg-light p-3 rounded">
+                  <code style="font-size: 0.9em;">
+                    [{{ query_embedding|join:", " }}, ...]
+                  </code>
+                  <small class="text-muted d-block mt-2">Showing first 10 dimensions of 384 total</small>
+                </div>
+                <p class="text-muted mt-2">The query is converted into the same vector space as stored documents</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Flow Arrow -->
+        <div class="row mb-4">
+          <div class="col-12 text-center">
+            <i class="bi bi-arrow-down" style="font-size: 2rem; color: #6c757d;"></i>
+          </div>
+        </div>
+
+        <!-- Step 3: Similarity Search -->
+        <div class="row mb-4">
+          <div class="col-12">
+            <div class="card border-warning shadow-sm">
+              <div class="card-header bg-warning text-white">
+                <h5 class="mb-0">
+                  <i class="bi bi-3-circle"></i> Similarity Search in Vector Database
+                </h5>
+              </div>
+              <div class="card-body">
+                <div class="row">
+                  <div class="col-md-8">
+                    <p><strong>Comparing query embedding with {{ total_stored_vectors }} stored vectors...</strong></p>
+                    <ul class="list-unstyled">
+                      <li><i class="bi bi-check-circle text-success"></i> Calculate cosine similarity scores</li>
+                      <li><i class="bi bi-check-circle text-success"></i> Rank results by similarity</li>
+                      <li><i class="bi bi-check-circle text-success"></i> Select top-k most relevant chunks</li>
+                    </ul>
+                  </div>
+                  <div class="col-md-4">
+                    <div class="text-center">
+                      <div class="spinner-border text-warning" role="status" style="width: 3rem; height: 3rem;">
+                        <span class="visually-hidden">Searching...</span>
+                      </div>
+                      <p class="mt-2 text-muted">Processing...</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Flow Arrow -->
+        <div class="row mb-4">
+          <div class="col-12 text-center">
+            <i class="bi bi-arrow-down" style="font-size: 2rem; color: #6c757d;"></i>
+          </div>
+        </div>
+
+        <!-- Step 4: Retrieved Chunks -->
+        <div class="row mb-4">
+          <div class="col-12">
+            <div class="card border-info shadow-sm">
+              <div class="card-header bg-info text-white">
+                <h5 class="mb-0">
+                  <i class="bi bi-4-circle"></i> Top-{{ retrieved_chunks|length }} Retrieved Chunks
+                </h5>
+              </div>
+              <div class="card-body">
+                <p class="mb-3"><strong>Most relevant chunks based on similarity scores:</strong></p>
+                
+                {% for chunk in retrieved_chunks %}
+                <div class="card mb-3 border-0 bg-light">
+                  <div class="card-body">
+                    <div class="row">
+                      <div class="col-md-1">
+                        <div class="text-center">
+                          <span class="badge bg-primary rounded-pill" style="font-size: 1rem;">{{ chunk.rank }}</span>
+                        </div>
+                      </div>
+                      <div class="col-md-2">
+                        <h6 class="text-muted mb-1">Chunk ID:</h6>
+                        <p class="fw-bold">{{ chunk.chunk_id }}</p>
+                        <h6 class="text-muted mb-1">Similarity:</h6>
+                        <span class="badge bg-success">{{ chunk.similarity_score }}</span>
+                      </div>
+                      <div class="col-md-5">
+                        <h6 class="text-muted mb-1">Retrieved Text:</h6>
+                        <p class="card-text">{{ chunk.text }}</p>
+                      </div>
+                      <div class="col-md-4">
+                        <h6 class="text-muted mb-1">Vector (first 10 dims):</h6>
+                        <div class="bg-white p-2 rounded border">
+                          <code style="font-size: 0.8em;">[{{ chunk.embedding|join:", " }}, ...]</code>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                {% endfor %}
+                
+                <div class="alert alert-success mt-3">
+                  <i class="bi bi-check-circle"></i>
+                  <strong>Retrieval Complete!</strong> Found {{ retrieved_chunks|length }} relevant chunks that can now be used to augment the response.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Navigation -->
+<div class="row">
+  <div class="col-12">
+    <div class="d-flex justify-content-between">
+      <a href="{% url 'vector_storage' %}" class="btn btn-outline-primary">
+        <i class="bi bi-arrow-left"></i> Previous: Vector Storage
+      </a>
+      <a href="{% url 'augmentation' %}" class="btn btn-primary">
+        Next Step: Augmentation <i class="bi bi-arrow-right"></i>
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}

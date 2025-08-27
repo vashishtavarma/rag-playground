@@ -1,0 +1,4 @@
+# Do not mention version numbers
+Django
+PyPDF2
+fastembed

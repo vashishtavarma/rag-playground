@@ -1,0 +1,106 @@
+{% extends 'ragAPP/base.html' %}
+
+{% block title %}Input Parsing - RAG Pipeline{% endblock %}
+
+{% block nav_extra %}
+<span class="navbar-text">
+  <i class="bi bi-file-earmark-text"></i> Input Parsing
+</span>
+{% endblock %}
+
+{% block content %}
+      <!-- Step Header -->
+      <div class="row mb-4">
+        <div class="col-12">
+          <div class="card step-card shadow-sm">
+            <div class="card-header">
+              <h4 class="mb-0 step-title">
+                <i class="bi bi-file-earmark-text"></i> Input Parsing
+              </h4>
+              <small>Upload TXT/PDF files for basic text parsing and cleaning</small>
+            </div>
+            <div class="card-body">
+              <!-- Upload Form -->
+              <form method="post" enctype="multipart/form-data" class="mb-4">
+                {% csrf_token %}
+                <div class="row align-items-end">
+                  <div class="col-md-9">
+                    <label for="fileInput" class="form-label">
+                      <i class="bi bi-cloud-upload"></i> Select File (TXT or PDF only)
+                    </label>
+                    <input type="file" class="form-control" id="fileInput" name="file" accept=".txt, .pdf" required>
+                  </div>
+                  <div class="col-md-3">
+                    <button class="btn btn-primary w-100" type="submit">
+                      <i class="bi bi-play-circle"></i> Process File
+                    </button>
+                  </div>
+                </div>
+              </form>
+
+              {% if raw_text is not None %}
+              <!-- Results Section -->
+              <div class="row g-4">
+                <div class="col-lg-6">
+                  <div class="card h-100 border-warning">
+                    <div class="card-header bg-warning text-dark">
+                      <i class="bi bi-file-text"></i> Raw Text
+                      <span class="badge bg-dark ms-2">{{ raw_text|length }} chars</span>
+                    </div>
+                    <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                      <pre class="mb-0" style="white-space: pre-wrap; font-size: 0.9em;">{{ raw_text }}</pre>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-lg-6">
+                  <div class="card h-100 border-success">
+                    <div class="card-header bg-success text-white">
+                      <i class="bi bi-check-circle"></i> Basic Cleaned Text
+                      <span class="badge bg-dark ms-2">{{ parsed_result|length }} chars</span>
+                    </div>
+                    <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                      <pre class="mb-0" style="white-space: pre-wrap; font-size: 0.9em;">{{ parsed_result }}</pre>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Processing Stats -->
+              <div class="row mt-4">
+                <div class="col-12">
+                  <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> 
+                    <strong>Processing Complete:</strong> 
+                    Text cleaned by removing junk characters, fixing broken words, normalizing spaces, and limiting newlines. 
+                    Reduction: {{ char_reduction }} characters cleaned.
+                  </div>
+                </div>
+              </div>
+              {% else %}
+              <!-- Instructions -->
+              <div class="alert alert-primary">
+                <i class="bi bi-info-circle"></i>
+                <strong>Instructions:</strong> Upload a .txt or .pdf file to see how basic parsing cleans and processes your document.
+                <br><br>
+                <strong>Basic Parsing:</strong> Extracts and cleans text by removing junk characters, fixing broken words, normalizing spaces, and limiting excessive newlines.
+              </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+<!-- Navigation -->
+<div class="row">
+  <div class="col-12">
+    <div class="d-flex justify-content-between">
+      <a href="{% url 'home' %}" class="btn btn-outline-primary">
+        <i class="bi bi-arrow-left"></i> Back to Pipeline Overview
+      </a>
+      <a href="{% url 'chunking' %}" class="btn btn-primary">
+        Next Step: Chunking <i class="bi bi-arrow-right"></i>
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}

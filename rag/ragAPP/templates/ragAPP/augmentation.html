@@ -1,0 +1,200 @@
+{% extends 'ragAPP/base.html' %}
+
+{% block title %}Augmentation - RAG Pipeline{% endblock %}
+
+{% block nav_extra %}
+<span class="navbar-text">
+  <i class="bi bi-plus-circle"></i> Augmentation
+</span>
+{% endblock %}
+
+{% block content %}
+<!-- Step Header -->
+<div class="row mb-4">
+  <div class="col-12">
+    <div class="card step-card shadow-sm">
+      <div class="card-header">
+        <h4 class="mb-0" style="color: white;">
+          <i class="bi bi-plus-circle"></i> RAG Demo – Step 6: Augmentation
+        </h4>
+        <small style="color: rgba(255, 255, 255, 0.8);">Combine user query with retrieved context to create enhanced LLM prompt</small>
+      </div>
+      <div class="card-body">
+        {% if not has_stored_vectors %}
+        <!-- No Vectors Warning -->
+        <div class="alert alert-warning">
+          <i class="bi bi-exclamation-triangle"></i>
+          <strong>No vectors in storage!</strong> Please go to <a href="{% url 'vector_storage' %}">Vector Storage</a> and add some vectors first to see the augmentation demo.
+        </div>
+        {% else %}
+        <!-- Statistics -->
+        <div class="row mb-4">
+          <div class="col-md-6">
+            <div class="card border-0 bg-light">
+              <div class="card-body text-center">
+                <h5 class="text-muted">Retrieved Chunks</h5>
+                <h3 class="step-title">{{ retrieved_chunks|length }}</h3>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="card border-0 bg-light">
+              <div class="card-body text-center">
+                <h5 class="text-muted">Augmentation Status</h5>
+                <h3 class="step-title">Complete</h3>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 1: User Query -->
+        <div class="row mb-4">
+          <div class="col-12">
+            <div class="card border-primary shadow-sm">
+              <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                  <i class="bi bi-1-circle"></i> User Query
+                </h5>
+              </div>
+              <div class="card-body">
+                <div class="text-center">
+                  <h4 class="text-primary">"{{ demo_query }}"</h4>
+                  <p class="text-muted">Original user question that needs context to be answered properly</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Flow Arrow -->
+        <div class="row mb-4">
+          <div class="col-12 text-center">
+            <i class="bi bi-arrow-down" style="font-size: 2rem; color: #6c757d;"></i>
+          </div>
+        </div>
+
+        <!-- Step 2: Retrieved Chunks -->
+        <div class="row mb-4">
+          <div class="col-12">
+            <div class="card border-success shadow-sm">
+              <div class="card-header bg-success text-white">
+                <h5 class="mb-0">
+                  <i class="bi bi-2-circle"></i> Retrieved Context Chunks
+                </h5>
+              </div>
+              <div class="card-body">
+                <p class="mb-3"><strong>Top {{ retrieved_chunks|length }} most relevant chunks from vector database:</strong></p>
+                
+                {% for chunk in retrieved_chunks %}
+                <div class="card mb-3 border-0 bg-light">
+                  <div class="card-body">
+                    <div class="row">
+                      <div class="col-md-1">
+                        <div class="text-center">
+                          <span class="badge bg-success rounded-pill" style="font-size: 1rem;">{{ chunk.rank }}</span>
+                        </div>
+                      </div>
+                      <div class="col-md-2">
+                        <h6 class="text-muted mb-1">Chunk ID:</h6>
+                        <p class="fw-bold">{{ chunk.chunk_id }}</p>
+                        <h6 class="text-muted mb-1">Similarity:</h6>
+                        <span class="badge bg-info">{{ chunk.similarity_score }}</span>
+                      </div>
+                      <div class="col-md-9">
+                        <h6 class="text-muted mb-1">Context Text:</h6>
+                        <p class="card-text">{{ chunk.text }}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                {% endfor %}
+                
+                <div class="alert alert-info mt-3">
+                  <i class="bi bi-info-circle"></i>
+                  <strong>Context Ready!</strong> These chunks will provide relevant background information for the LLM.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Flow Arrow -->
+        <div class="row mb-4">
+          <div class="col-12 text-center">
+            <i class="bi bi-arrow-down" style="font-size: 2rem; color: #6c757d;"></i>
+          </div>
+        </div>
+
+        <!-- Step 3: Augmented Prompt -->
+        <div class="row mb-4">
+          <div class="col-12">
+            <div class="card border-warning shadow-sm">
+              <div class="card-header bg-warning text-white">
+                <h5 class="mb-0">
+                  <i class="bi bi-3-circle"></i> Augmented Prompt (Final Input to LLM)
+                </h5>
+              </div>
+              <div class="card-body">
+                <p class="mb-3"><strong>Complete prompt combining user query + retrieved context:</strong></p>
+                
+                <div class="card bg-light border-0">
+                  <div class="card-body">
+                    <h6 class="text-muted mb-2">Final LLM Input:</h6>
+                    <div class="bg-white p-3 rounded border" style="font-family: 'Courier New', monospace; font-size: 0.9em; line-height: 1.5;">
+                      <pre style="margin: 0; white-space: pre-wrap;">{{ augmented_prompt }}</pre>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="row mt-4">
+                  <div class="col-md-4">
+                    <div class="text-center">
+                      <i class="bi bi-question-circle text-primary" style="font-size: 2rem;"></i>
+                      <h6 class="mt-2">User Query</h6>
+                      <small class="text-muted">Original question</small>
+                    </div>
+                  </div>
+                  <div class="col-md-4">
+                    <div class="text-center">
+                      <i class="bi bi-plus" style="font-size: 2rem; color: #6c757d;"></i>
+                      <h6 class="mt-2">Combined</h6>
+                      <small class="text-muted">Merged together</small>
+                    </div>
+                  </div>
+                  <div class="col-md-4">
+                    <div class="text-center">
+                      <i class="bi bi-collection text-success" style="font-size: 2rem;"></i>
+                      <h6 class="mt-2">Context</h6>
+                      <small class="text-muted">Retrieved chunks</small>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="alert alert-success mt-4">
+                  <i class="bi bi-check-circle"></i>
+                  <strong>Augmentation Complete!</strong> The prompt now contains both the user's question and relevant context, ready for the LLM to generate an informed response.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Navigation -->
+<div class="row">
+  <div class="col-12">
+    <div class="d-flex justify-content-between">
+      <a href="{% url 'retrieval' %}" class="btn btn-outline-primary">
+        <i class="bi bi-arrow-left"></i> Previous: Retrieval
+      </a>
+      <a href="{% url 'generation' %}" class="btn btn-primary">
+        Next Step: Generation <i class="bi bi-arrow-right"></i>
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}
