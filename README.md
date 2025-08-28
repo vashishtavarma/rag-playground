@@ -30,7 +30,7 @@ This application provides a hands-on demonstration of all 7 key steps in the RAG
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/vashishtavarma/rag-pipeline.git
+   git clone <repository-url>
    cd rag-system
    ```
 
@@ -115,7 +115,7 @@ The application supports multiple input methods:
 ## 📁 Project Structure
 
 ```
-rag-system/
+rag-pipeline/
 ├── rag/                    # Django project directory
 │   ├── rag/               # Project configuration
 │   │   ├── settings.py
