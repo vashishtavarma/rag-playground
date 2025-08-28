@@ -30,7 +30,7 @@ This application provides a hands-on demonstration of all 7 key steps in the RAG
 
 1. **Clone the repository**
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/vashishtavarma/rag-pipeline.git
    cd rag-system
    ```
 
@@ -194,7 +194,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - FastEmbed library for efficient text embeddings
 - Django framework for rapid web development
 - BAAI for the BGE embedding model
-
-## 📧 Support
-
-For questions or issues, please open an issue in the repository or contact the development team.
