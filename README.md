@@ -30,8 +30,8 @@ This application provides a hands-on demonstration of all 7 key steps in the RAG
 
 1. **Clone the repository**
    ```bash
-   git clone <repository-url>
-   cd rag-system
+   git clone https://www.github.com/vashishtavarma/rag-pipeline.git
+   cd rag-pipeline
    ```
 
 2. **Create and activate a virtual environment**
