@@ -17,7 +17,7 @@
         <h4 class="mb-0" style="color: white;">
           <i class="bi bi-database"></i> RAG Demo – Step 4: Vector Storage
         </h4>
-        <small style="color: rgba(255, 255, 255, 0.8);">Full pipeline: Parse → Chunk → Embed → Store</small>
+        <small style="color: rgba(255, 255, 255, 0.8);">Full pipeline: Parse → Chunk → FastEmbed → Store</small>
       </div>
       <div class="card-body">
         <!-- Messages -->
@@ -101,7 +101,7 @@
               <div class="alert alert-info">
                 <i class="bi bi-info-circle"></i>
                 <strong>Pipeline Steps:</strong> 
-                1. Parse input → 2. Clean text → 3. Create chunks (200 chars, 50 overlap) → 4. Generate random embeddings (384D) → 5. Store in vector DB
+                1. Parse input → 2. Clean text → 3. Create chunks (200 chars, 50 overlap) → 4. Generate FastEmbed embeddings (384D) → 5. Store in vector DB
               </div>
             </div>
           </div>

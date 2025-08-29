@@ -320,24 +320,40 @@ def vector_storage(request: HttpRequest):
                 if chunks:
                     print(f"🚀 Processing {len(chunks)} chunks for vector storage...")
                     
-                    # Step 4: Generate random embeddings and store
-                    for i, chunk in enumerate(chunks):
-                        # Generate random embedding (384 dimensions)
-                        random_embedding = [round(random.uniform(-1.0, 1.0), 6) for _ in range(384)]
-                        vector_id = len(stored_vectors) + 1
+                    # Step 4: Generate FastEmbed embeddings and store
+                    try:
+                        from fastembed import TextEmbedding
                         
-                        stored_vectors.append({
-                            'id': vector_id,
-                            'text': chunk,
-                            'embedding': random_embedding,
-                            'dimensions': 384
-                        })
-                    
-                    request.session['vector_storage'] = stored_vectors
-                    request.session.modified = True
-                    
-                    message = f"✅ Successfully processed and stored {len(chunks)} text chunks with random embeddings (384D each)"
-                    print(f"🎉 Stored {len(chunks)} vectors in mock database!")
+                        print("📦 Loading FastEmbed model: BAAI/bge-small-en")
+                        model = TextEmbedding(model_name="BAAI/bge-small-en")
+                        print("✅ FastEmbed model loaded successfully!")
+                        
+                        print(f"🧠 Generating embeddings for {len(chunks)} chunks...")
+                        vectors = list(model.embed(chunks))
+                        print(f"✅ Generated {len(vectors)} embedding vectors")
+                        
+                        for i, (chunk, vector) in enumerate(zip(chunks, vectors)):
+                            # Convert numpy array to list and round to 6 decimal places
+                            vector_list = [round(float(x), 6) for x in vector]
+                            vector_id = len(stored_vectors) + 1
+                            
+                            stored_vectors.append({
+                                'id': vector_id,
+                                'text': chunk,
+                                'embedding': vector_list,
+                                'dimensions': len(vector_list)
+                            })
+                            print(f"  ✅ Chunk {i+1}/{len(chunks)} embedded - ID: {vector_id}, Dims: {len(vector_list)}")
+                        
+                        request.session['vector_storage'] = stored_vectors
+                        request.session.modified = True
+                        
+                        message = f"✅ Successfully processed and stored {len(chunks)} text chunks with FastEmbed embeddings ({len(vectors[0])}D each)"
+                        print(f"🎉 Stored {len(chunks)} vectors with real embeddings in session storage!")
+                        
+                    except Exception as e:
+                        error = f"❌ Error generating embeddings: {str(e)}"
+                        print(f"❌ EMBEDDING ERROR: {str(e)}")
                 else:
                     error = "❌ No valid chunks were generated from the input text"
                     
