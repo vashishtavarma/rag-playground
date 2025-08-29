@@ -3,3 +3,5 @@ Django
 PyPDF2
 fastembed
 numpy
+google-generativeai
+python-dotenv

@@ -840,25 +840,80 @@ def perform_rag_query(query):
 
 
 def generate_response(query, context):
-    """Generate response based on query and retrieved context"""
-    print(f"\n💬 RESPONSE GENERATION")
+    """Generate response using Google Gemini API based on query and retrieved context"""
+    print(f"\n💬 RESPONSE GENERATION WITH GEMINI API")
     print(f"📝 Query: '{query}'")
     print(f"📄 Context length: {len(context)} characters")
-    
-    # Simple template-based response generation
-    # In a real implementation, this would use an LLM API
     
     if not context.strip():
         print("⚠️ No context available - returning default message")
         return "I couldn't find relevant information in the knowledge base to answer your question."
     
-    print("✅ Context available - generating template-based response")
+    try:
+        import google.generativeai as genai
+        import os
+        from dotenv import load_dotenv
+        
+        # Load environment variables
+        load_dotenv()
+        
+        # Configure Gemini API
+        api_key = os.getenv('GOOGLE_API_KEY')
+        if not api_key:
+            print("⚠️ Google API key not found - falling back to template response")
+            return generate_template_response(query, context)
+        
+        genai.configure(api_key=api_key)
+        print("✅ Gemini API configured successfully")
+        
+        # Use Gemini 1.5 Flash (free model)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        print("📦 Using Gemini 1.5 Flash model")
+        
+        # Create prompt for the LLM
+        prompt = f"""You are a helpful AI assistant that answers questions based on provided context from documents.
+
+                Context from retrieved documents:
+                {context.strip()}
+
+                User Question: {query}
+
+                Instructions:
+                - If user greets you, respond with a friendly greeting
+                - Answer the user's question using ONLY the information provided in the context above
+                - Be concise and accurate
+                - If the context doesn't contain enough information to fully answer the question, say so clearly
+                - Don't make up information that's not in the context
+                - Structure your response in a clear, readable format
+                - If no context is provided, respond with a message that "Sorry, I don't have enough data to answer your question"
+
+                Answer:"""
+        
+        print("🤖 Sending request to Gemini API...")
+        response = model.generate_content(prompt)
+        
+        if response and response.text:
+            print(f"✅ Gemini response received - {len(response.text)} characters")
+            return response.text.strip()
+        else:
+            print("⚠️ Empty response from Gemini - falling back to template")
+            return generate_template_response(query, context)
+            
+    except Exception as e:
+        print(f"❌ Error with Gemini API: {str(e)}")
+        print("🔄 Falling back to template response")
+        return generate_template_response(query, context)
+
+
+def generate_template_response(query, context):
+    """Fallback template-based response generation"""
+    print("📝 Generating template-based response as fallback")
     response = f"""Based on the information in my knowledge base, here's what I found regarding your question: "{query}"
 
-{context.strip()}
+        {context.strip()}
 
-This information was retrieved from the most relevant sections of the uploaded documents. If you need more specific details or have follow-up questions, please feel free to ask!"""
+        This information was retrieved from the most relevant sections of the uploaded documents. If you need more specific details or have follow-up questions, please feel free to ask!"""
     
-    print(f"✅ Response generated successfully - {len(response)} characters")
+    print(f"✅ Template response generated - {len(response)} characters")
     return response
 
