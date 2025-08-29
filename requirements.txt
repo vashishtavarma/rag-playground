@@ -2,3 +2,4 @@
 Django
 PyPDF2
 fastembed
+numpy

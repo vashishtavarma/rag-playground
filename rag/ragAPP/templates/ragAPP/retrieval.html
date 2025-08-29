@@ -17,14 +17,14 @@
         <h4 class="mb-0" style="color: white;">
           <i class="bi bi-search"></i> RAG Demo – Step 5: Retrieval
         </h4>
-        <small style="color: rgba(255, 255, 255, 0.8);">Query processing and similarity search demonstration</small>
+        <small style="color: rgba(255, 255, 255, 0.8);">Query & similarity search</small>
       </div>
       <div class="card-body">
         {% if not has_stored_vectors %}
         <!-- No Vectors Warning -->
         <div class="alert alert-warning">
           <i class="bi bi-exclamation-triangle"></i>
-          <strong>No vectors in storage!</strong> Please go to <a href="{% url 'vector_storage' %}">Vector Storage</a> and add some vectors first to see the retrieval demo.
+          <strong>No vectors found!</strong> Go to <a href="{% url 'vector_storage' %}">Vector Storage</a> to add vectors first.
         </div>
         {% else %}
         <!-- Statistics -->
@@ -200,7 +200,7 @@
 </div>
 
 <!-- Navigation -->
-<div class="row">
+<div class="row mb-5">
   <div class="col-12">
     <div class="d-flex justify-content-between">
       <a href="{% url 'vector_storage' %}" class="btn btn-outline-primary">

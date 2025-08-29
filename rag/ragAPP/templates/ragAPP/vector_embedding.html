@@ -17,7 +17,7 @@
         <h4 class="mb-0" style="color: white;">
           <i class="bi bi-vector-pen"></i> RAG Demo – Step 3: Vector Embedding
         </h4>
-        <small style="color: rgba(255, 255, 255, 0.8);">Convert text chunks into high-dimensional vector representations</small>
+        <small style="color: rgba(255, 255, 255, 0.8);">Convert text chunks to vectors</small>
       </div>
       <div class="card-body">
         <!-- Input Form -->
@@ -28,11 +28,11 @@
           <!-- Input Method Selection -->
           <div class="row mb-3">
             <div class="col-12">
-              <label for="inputMethod" class="form-label fw-bold">Input Method</label>
+              <label for="inputMethod" class="form-label fw-bold">Input</label>
               <select class="form-select" id="inputMethod" onchange="toggleInputMethod()">
-                <option value="file" {% if request.POST.input_method == 'file' or not request.POST %}selected{% endif %}>Upload File (TXT or PDF)</option>
-                <option value="text" {% if request.POST.input_method == 'text' %}selected{% endif %}>Paste Text Manually</option>
-                <option value="lines" {% if request.POST.input_method == 'lines' %}selected{% endif %}>Multiple Lines (Each line = Chunk)</option>
+                <option value="file" {% if request.POST.input_method == 'file' or not request.POST %}selected{% endif %}>Upload File</option>
+                <option value="text" {% if request.POST.input_method == 'text' %}selected{% endif %}>Paste Text</option>
+                <option value="lines" {% if request.POST.input_method == 'lines' %}selected{% endif %}>Multi-Line Input</option>
               </select>
             </div>
           </div>
@@ -169,7 +169,7 @@
 </div>
 
 <!-- Navigation -->
-<div class="row">
+<div class="row mb-5">
   <div class="col-12">
     <div class="d-flex justify-content-between">
       <a href="{% url 'chunking' %}" class="btn btn-outline-primary">

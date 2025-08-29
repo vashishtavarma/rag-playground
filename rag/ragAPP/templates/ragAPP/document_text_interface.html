@@ -1,0 +1,97 @@
+{% extends 'ragAPP/base.html' %}
+
+{% block title %}Document Text Interface{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="row mb-5">
+  <div class="col-12 text-center">
+    <h1 class="display-5 step-title mb-3">Document Text Interface</h1>
+    <p class="text-muted">Upload documents and chat with your knowledge base</p>
+  </div>
+</div>
+
+<!-- Action Cards -->
+<div class="row g-4 mb-5">
+  <!-- Upload Documents Card -->
+  <div class="col-lg-6">
+    <a href="{% url 'knowledge_base' %}" class="text-decoration-none">
+      <div class="card h-100 card-hover step-card">
+        <div class="card-body text-center p-5">
+          <div class="mb-4">
+            <i class="bi bi-cloud-upload step-icon" style="font-size: 3.5rem; color: #28a745;"></i>
+          </div>
+          <h3 class="step-title mb-3">Upload Documents</h3>
+          <p class="text-muted mb-4">Upload text or PDF files to build your knowledge base</p>
+          <div class="d-flex justify-content-center gap-3">
+            <span class="badge bg-success">TXT</span>
+            <span class="badge bg-success">PDF</span>
+          </div>
+        </div>
+      </div>
+    </a>
+  </div>
+
+  <!-- Chat Interface Card -->
+  <div class="col-lg-6">
+    <a href="{% url 'chat_interface' %}" class="text-decoration-none">
+      <div class="card h-100 card-hover step-card">
+        <div class="card-body text-center p-5">
+          <div class="mb-4">
+            <i class="bi bi-chat-dots step-icon" style="font-size: 3.5rem; color: #007bff;"></i>
+          </div>
+          <h3 class="step-title mb-3">Chat Interface</h3>
+          <p class="text-muted mb-4">Ask questions and get answers from your documents</p>
+          <div class="d-flex justify-content-center gap-3">
+            <span class="badge bg-primary">RAG</span>
+            <span class="badge bg-primary">AI Chat</span>
+          </div>
+        </div>
+      </div>
+    </a>
+  </div>
+</div>
+
+<!-- Features Overview -->
+<div class="row">
+  <div class="col-12">
+    <div class="card step-card">
+      <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>How It Works</h5>
+      </div>
+      <div class="card-body">
+        <div class="row g-4">
+          <div class="col-md-4">
+            <div class="text-center">
+              <div class="mb-3">
+                <i class="bi bi-file-earmark-arrow-up" style="font-size: 2rem; color: var(--color-medium);"></i>
+              </div>
+              <h6 class="step-title">1. Upload Documents</h6>
+              <p class="text-muted small">Upload your text or PDF files to the knowledge base</p>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="text-center">
+              <div class="mb-3">
+                <i class="bi bi-cpu" style="font-size: 2rem; color: var(--color-medium);"></i>
+              </div>
+              <h6 class="step-title">2. AI Processing</h6>
+              <p class="text-muted small">Documents are automatically chunked and embedded using FastEmbed</p>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="text-center">
+              <div class="mb-3">
+                <i class="bi bi-chat-square-text" style="font-size: 2rem; color: var(--color-medium);"></i>
+              </div>
+              <h6 class="step-title">3. Chat & Query</h6>
+              <p class="text-muted small">Ask questions and get contextual answers from your documents</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

@@ -10,4 +10,8 @@ urlpatterns = [
     path("retrieval/", views.retrieval, name="retrieval"),
     path("augmentation/", views.augmentation, name="augmentation"),
     path("generation/", views.generation, name="generation"),
+    path("document-text-interface/", views.document_text_interface, name="document_text_interface"),
+    path("knowledge-base/", views.knowledge_base, name="knowledge_base"),
+    path("chat-interface/", views.chat_interface, name="chat_interface"),
+    path("chat-query/", views.chat_query, name="chat_query"),
 ]

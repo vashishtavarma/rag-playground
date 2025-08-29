@@ -17,7 +17,7 @@
               <h4 class="mb-0 step-title">
                 <i class="bi bi-file-earmark-text"></i> Input Parsing
               </h4>
-              <small>Upload TXT/PDF files for basic text parsing and cleaning</small>
+              <small>Upload & clean TXT/PDF files</small>
             </div>
             <div class="card-body">
               <!-- Upload Form -->
@@ -26,7 +26,7 @@
                 <div class="row align-items-end">
                   <div class="col-md-9">
                     <label for="fileInput" class="form-label">
-                      <i class="bi bi-cloud-upload"></i> Select File (TXT or PDF only)
+                      <i class="bi bi-cloud-upload"></i> Select File
                     </label>
                     <input type="file" class="form-control" id="fileInput" name="file" accept=".txt, .pdf" required>
                   </div>
@@ -71,8 +71,7 @@
                   <div class="alert alert-info">
                     <i class="bi bi-info-circle"></i> 
                     <strong>Processing Complete:</strong> 
-                    Text cleaned by removing junk characters, fixing broken words, normalizing spaces, and limiting newlines. 
-                    Reduction: {{ char_reduction }} characters cleaned.
+                    Cleaned {{ char_reduction }} characters (removed junk, fixed spacing).
                   </div>
                 </div>
               </div>
@@ -80,9 +79,7 @@
               <!-- Instructions -->
               <div class="alert alert-primary">
                 <i class="bi bi-info-circle"></i>
-                <strong>Instructions:</strong> Upload a .txt or .pdf file to see how basic parsing cleans and processes your document.
-                <br><br>
-                <strong>Basic Parsing:</strong> Extracts and cleans text by removing junk characters, fixing broken words, normalizing spaces, and limiting excessive newlines.
+                <strong>Upload</strong> a .txt or .pdf file to extract and clean text.
               </div>
               {% endif %}
             </div>
@@ -91,11 +88,11 @@
       </div>
 
 <!-- Navigation -->
-<div class="row">
+<div class="row mb-5">
   <div class="col-12">
     <div class="d-flex justify-content-between">
       <a href="{% url 'home' %}" class="btn btn-outline-primary">
-        <i class="bi bi-arrow-left"></i> Back to Pipeline Overview
+        <i class="bi bi-arrow-left"></i> Back to Overview
       </a>
       <a href="{% url 'chunking' %}" class="btn btn-primary">
         Next Step: Chunking <i class="bi bi-arrow-right"></i>

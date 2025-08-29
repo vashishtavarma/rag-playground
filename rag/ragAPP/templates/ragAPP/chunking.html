@@ -17,7 +17,7 @@
         <h4 class="mb-0" style="color: white;">
           <i class="bi bi-scissors"></i> RAG Demo – Step 2: Chunking
         </h4>
-        <small style="color: rgba(255, 255, 255, 0.8);">Split text into smaller, manageable chunks with customizable size and overlap</small>
+        <small style="color: rgba(255, 255, 255, 0.8);">Split text into chunks with custom size & overlap</small>
       </div>
       <div class="card-body">
         <!-- Input Form -->
@@ -28,10 +28,10 @@
           <!-- Input Method Selection -->
           <div class="row mb-3">
             <div class="col-12">
-              <label for="inputMethod" class="form-label fw-bold">Input Method</label>
+              <label for="inputMethod" class="form-label fw-bold">Input</label>
               <select class="form-select" id="inputMethod" onchange="toggleInputMethod()">
-                <option value="file" {% if request.POST.input_method == 'file' or not request.POST %}selected{% endif %}>Upload File (TXT or PDF)</option>
-                <option value="text" {% if request.POST.input_method == 'text' %}selected{% endif %}>Paste Text Manually</option>
+                <option value="file" {% if request.POST.input_method == 'file' or not request.POST %}selected{% endif %}>Upload File</option>
+                <option value="text" {% if request.POST.input_method == 'text' %}selected{% endif %}>Paste Text</option>
               </select>
             </div>
           </div>
@@ -50,9 +50,9 @@
           <div class="row mb-3" id="textInputSection">
             <div class="col-12">
               <label for="textInput" class="form-label">
-                <i class="bi bi-textarea-t"></i> Paste Your Text
+                <i class="bi bi-textarea-t"></i> Text Input
               </label>
-              <textarea class="form-control" id="textInput" name="text_input" rows="6" placeholder="Paste your text here...">{{ request.POST.text_input|default:"" }}</textarea>
+              <textarea class="form-control" id="textInput" name="text_input" rows="6" placeholder="Enter your text here...">{{ request.POST.text_input|default:"" }}</textarea>
             </div>
           </div>
 
@@ -60,13 +60,13 @@
           <div class="row mb-4">
             <div class="col-md-6">
               <label for="chunkSize" class="form-label">
-                <i class="bi bi-scissors"></i> Chunk Size (characters)
+                <i class="bi bi-scissors"></i> Chunk Size
               </label>
               <input type="number" class="form-control" id="chunkSize" name="chunk_size" value="{{ chunk_size|default:200 }}" min="50" max="1000">
             </div>
             <div class="col-md-6">
               <label for="overlapSize" class="form-label">
-                <i class="bi bi-arrow-left-right"></i> Overlap Size (characters)
+                <i class="bi bi-arrow-left-right"></i> Overlap Size
               </label>
               <input type="number" class="form-control" id="overlapSize" name="overlap_size" value="{{ overlap_size|default:50 }}" min="0" max="200">
             </div>
@@ -75,9 +75,9 @@
           <!-- Submit Button -->
           <div class="row">
             <div class="col-12">
-              <button class="btn btn-primary w-100" type="submit">
-                <i class="bi bi-play-circle"></i> Process and Chunk Text
-              </button>
+                <button class="btn btn-primary w-100" type="submit">
+                <i class="bi bi-play-circle"></i> Create Chunks
+                </button>
             </div>
           </div>
         </form>
@@ -145,7 +145,7 @@
         <!-- Instructions -->
         <div class="alert alert-primary">
           <i class="bi bi-info-circle"></i>
-          <strong>Instructions:</strong> Upload a file or paste text, then adjust chunk size and overlap parameters to see how text is split into manageable pieces.
+          Upload a file or paste text, then adjust parameters to split into chunks.
         </div>
         {% endif %}
       </div>
@@ -154,7 +154,7 @@
 </div>
 
 <!-- Navigation -->
-<div class="row">
+<div class="row mb-5">
   <div class="col-12">
     <div class="d-flex justify-content-between">
       <a href="{% url 'home' %}" class="btn btn-outline-primary">

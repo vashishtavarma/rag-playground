@@ -1,7 +1,14 @@
-from django.shortcuts import render
-from django.http import HttpRequest, HttpResponse
+from django.shortcuts import render, get_object_or_404
+from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
+from django.views.decorators.http import require_http_methods
 import io
 import PyPDF2
+import json
+import uuid
+import numpy as np
+from .models import Document, TextChunk, ChatSession, ChatMessage
 
 
 
@@ -507,4 +514,351 @@ The key advantage of RAG is that it allows language models to access and utilize
         "has_stored_vectors": len(stored_vectors) > 0,
     }
     return render(request, "ragAPP/generation.html", context)
+
+
+def document_text_interface(request: HttpRequest):
+    """Card-based interface for document upload and text processing"""
+    return render(request, "ragAPP/document_text_interface.html")
+
+
+def knowledge_base(request: HttpRequest):
+    """Knowledge Base - Document upload and management interface"""
+    print("\n" + "="*60)
+    print("📋 KNOWLEDGE BASE VIEW - Starting document management")
+    print("="*60)
+    
+    documents = Document.objects.all().order_by('-uploaded_at')
+    print(f"📊 Found {documents.count()} existing documents in database")
+    
+    message = None
+    error = None
+    
+    if request.method == "POST":
+        action = request.POST.get("action")
+        print(f"🎯 POST request received with action: {action}")
+        
+        if action == "upload_document":
+            print("\n📤 DOCUMENT UPLOAD PROCESS STARTED")
+            print("-" * 40)
+            
+            title = request.POST.get("title", "")
+            uploaded_file = request.FILES.get("file")
+            
+            print(f"📝 Document title: '{title}'")
+            print(f"📁 File uploaded: {uploaded_file.name if uploaded_file else 'None'}")
+            
+            if not title:
+                error = "❌ Please provide a document title"
+                print("❌ ERROR: No title provided")
+            elif not uploaded_file:
+                error = "❌ Please select a file to upload"
+                print("❌ ERROR: No file uploaded")
+            else:
+                filename = uploaded_file.name.lower()
+                print(f"🔍 Processing file: {filename}")
+                
+                # Process file content
+                raw_text = ""
+                file_type = ""
+                
+                if filename.endswith(".txt"):
+                    print("📄 Detected TXT file - reading content...")
+                    raw_text = uploaded_file.read().decode("utf-8", errors="ignore")
+                    file_type = "txt"
+                    print(f"✅ TXT file read successfully - {len(raw_text)} characters")
+                elif filename.endswith(".pdf"):
+                    print("📕 Detected PDF file - extracting text...")
+                    try:
+                        pdf_reader = PyPDF2.PdfReader(uploaded_file)
+                        pages_text = [page.extract_text() or "" for page in pdf_reader.pages]
+                        raw_text = "\n".join(pages_text)
+                        file_type = "pdf"
+                        print(f"✅ PDF processed successfully - {len(pdf_reader.pages)} pages, {len(raw_text)} characters")
+                    except Exception as e:
+                        error = f"❌ Error reading PDF: {str(e)}"
+                        print(f"❌ PDF ERROR: {str(e)}")
+                else:
+                    error = "❌ Unsupported file format. Please upload TXT or PDF files."
+                    print(f"❌ ERROR: Unsupported file format: {filename}")
+                
+                if raw_text and not error:
+                    print(f"\n🧹 CLEANING TEXT - Original length: {len(raw_text)} characters")
+                    # Clean the text
+                    cleaned_text = parse_basic(raw_text)
+                    print(f"✅ Text cleaned - New length: {len(cleaned_text)} characters")
+                    
+                    print(f"\n💾 CREATING DOCUMENT RECORD")
+                    # Create document
+                    document = Document.objects.create(
+                        title=title,
+                        file_type=file_type,
+                        content=cleaned_text
+                    )
+                    print(f"✅ Document created with ID: {document.id}")
+                    
+                    # Process document into chunks with embeddings
+                    print(f"\n🔄 PROCESSING DOCUMENT INTO CHUNKS")
+                    try:
+                        process_document_chunks(document)
+                        document.processed = True
+                        document.save()
+                        print(f"✅ Document processing completed successfully!")
+                        message = f"✅ Document '{title}' uploaded and processed successfully!"
+                    except Exception as e:
+                        error = f"❌ Error processing document: {str(e)}"
+                        print(f"❌ PROCESSING ERROR: {str(e)}")
+                        document.delete()  # Clean up if processing failed
+                        print("🗑️ Document record deleted due to processing failure")
+        
+        elif action == "delete_document":
+            doc_id = request.POST.get("document_id")
+            try:
+                document = Document.objects.get(id=doc_id)
+                document.delete()
+                message = f"✅ Document deleted successfully!"
+            except Document.DoesNotExist:
+                error = "❌ Document not found"
+    
+    context = {
+        "documents": documents,
+        "message": message,
+        "error": error,
+    }
+    return render(request, "ragAPP/knowledge_base.html", context)
+
+
+def process_document_chunks(document):
+    """Process document into chunks with embeddings using FastEmbed"""
+    print(f"\n🔧 CHUNK PROCESSING - Document: '{document.title}'")
+    print("-" * 50)
+    
+    from fastembed import TextEmbedding
+    
+    print("📦 Loading FastEmbed model: BAAI/bge-small-en")
+    # Initialize FastEmbed model
+    model = TextEmbedding(model_name="BAAI/bge-small-en")
+    print("✅ FastEmbed model loaded successfully")
+    
+    # Create chunks
+    chunks = []
+    chunk_size = 200
+    overlap_size = 50
+    start = 0
+    chunk_index = 0
+    
+    print(f"⚙️ Chunking parameters: size={chunk_size}, overlap={overlap_size}")
+    
+    cleaned_text = clean_text(document.content)
+    print(f"📏 Cleaned text length: {len(cleaned_text)} characters")
+    
+    print("\n✂️ CREATING TEXT CHUNKS")
+    while start < len(cleaned_text):
+        end = start + chunk_size
+        chunk_text = cleaned_text[start:end]
+        if chunk_text.strip():
+            chunks.append(chunk_text.strip())
+            print(f"  📄 Chunk {len(chunks)}: {len(chunk_text)} chars - '{chunk_text[:50]}{'...' if len(chunk_text) > 50 else ''}'")
+        start = end - overlap_size
+        if start >= len(cleaned_text):
+            break
+    
+    print(f"✅ Created {len(chunks)} text chunks")
+    
+    # Generate embeddings for all chunks
+    if chunks:
+        print(f"\n🧠 GENERATING EMBEDDINGS for {len(chunks)} chunks")
+        vectors = list(model.embed(chunks))
+        print(f"✅ Generated {len(vectors)} embedding vectors")
+        
+        print(f"\n💾 SAVING CHUNKS TO DATABASE")
+        # Save chunks with embeddings
+        for i, (chunk_text, vector) in enumerate(zip(chunks, vectors)):
+            vector_list = [float(x) for x in vector]
+            chunk_obj = TextChunk.objects.create(
+                document=document,
+                text=chunk_text,
+                chunk_index=i,
+                embedding=vector_list
+            )
+            print(f"  ✅ Saved chunk {i+1}/{len(chunks)} - ID: {chunk_obj.id}, Embedding dims: {len(vector_list)}")
+        
+        print(f"🎉 CHUNK PROCESSING COMPLETE - {len(chunks)} chunks saved with embeddings")
+    else:
+        print("⚠️ No chunks created - document may be too short or empty")
+
+
+def chat_interface(request: HttpRequest):
+    """Chat interface for querying the knowledge base"""
+    # Get or create chat session
+    session_id = request.session.get('chat_session_id')
+    if not session_id:
+        session_id = str(uuid.uuid4())
+        request.session['chat_session_id'] = session_id
+    
+    chat_session, created = ChatSession.objects.get_or_create(
+        session_id=session_id
+    )
+    
+    # Get chat history
+    messages = chat_session.messages.all()
+    
+    # Get available documents
+    documents = Document.objects.filter(processed=True)
+    total_chunks = TextChunk.objects.count()
+    
+    context = {
+        "messages": messages,
+        "documents": documents,
+        "total_chunks": total_chunks,
+        "session_id": session_id,
+    }
+    return render(request, "ragAPP/chat_interface.html", context)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def chat_query(request: HttpRequest):
+    """Handle chat queries via AJAX"""
+    try:
+        data = json.loads(request.body)
+        query = data.get('query', '').strip()
+        session_id = data.get('session_id')
+        
+        if not query:
+            return JsonResponse({'error': 'Query cannot be empty'}, status=400)
+        
+        if not session_id:
+            return JsonResponse({'error': 'Session ID required'}, status=400)
+        
+        # Get chat session
+        try:
+            chat_session = ChatSession.objects.get(session_id=session_id)
+        except ChatSession.DoesNotExist:
+            return JsonResponse({'error': 'Invalid session'}, status=400)
+        
+        # Perform RAG query
+        response, retrieved_chunks = perform_rag_query(query)
+        
+        # Save chat message
+        chat_message = ChatMessage.objects.create(
+            session=chat_session,
+            message=query,
+            response=response,
+            retrieved_chunks=[chunk['id'] for chunk in retrieved_chunks]
+        )
+        
+        return JsonResponse({
+            'response': response,
+            'retrieved_chunks': retrieved_chunks,
+            'message_id': chat_message.id
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+def perform_rag_query(query):
+    """Perform RAG query using FastEmbed for similarity search"""
+    print(f"\n" + "="*60)
+    print(f"🔍 RAG QUERY PROCESSING - Query: '{query}'")
+    print("="*60)
+    
+    from fastembed import TextEmbedding
+    
+    print("📦 Loading FastEmbed model for query processing...")
+    # Initialize FastEmbed model
+    model = TextEmbedding(model_name="BAAI/bge-small-en")
+    print("✅ FastEmbed model loaded")
+    
+    print(f"\n🧠 GENERATING QUERY EMBEDDING")
+    # Generate query embedding
+    query_embedding = list(model.embed([query]))[0]
+    query_vector = np.array(query_embedding)
+    print(f"✅ Query embedded - Vector dimensions: {len(query_embedding)}")
+    
+    # Get all chunks with embeddings
+    chunks = TextChunk.objects.all()
+    print(f"\n📊 KNOWLEDGE BASE STATUS")
+    print(f"📄 Total chunks in database: {chunks.count()}")
+    
+    if not chunks.exists():
+        print("⚠️ No chunks found in knowledge base")
+        return "I don't have any documents in my knowledge base yet. Please upload some documents first.", []
+    
+    print(f"\n🔄 CALCULATING SIMILARITIES for {chunks.count()} chunks")
+    # Calculate similarities
+    similarities = []
+    for i, chunk in enumerate(chunks, 1):
+        chunk_vector = np.array(chunk.embedding)
+        # Cosine similarity
+        similarity = np.dot(query_vector, chunk_vector) / (np.linalg.norm(query_vector) * np.linalg.norm(chunk_vector))
+        similarities.append({
+            'chunk': chunk,
+            'similarity': float(similarity)
+        })
+        print(f"  📊 Chunk {i}: Similarity = {similarity:.4f} - '{chunk.text[:50]}{'...' if len(chunk.text) > 50 else ''}'")
+    
+    # Sort by similarity and get top 3
+    similarities.sort(key=lambda x: x['similarity'], reverse=True)
+    top_chunks = similarities[:3]
+    
+    print(f"\n🏆 TOP 3 MOST SIMILAR CHUNKS:")
+    for i, item in enumerate(top_chunks, 1):
+        chunk = item['chunk']
+        similarity = item['similarity']
+        print(f"  {i}. Similarity: {similarity:.4f} | Doc: '{chunk.document.title}' | Text: '{chunk.text[:80]}{'...' if len(chunk.text) > 80 else ''}'")
+    
+    # Prepare context for response
+    context_text = ""
+    retrieved_chunks = []
+    
+    print(f"\n📝 PREPARING CONTEXT FOR RESPONSE")
+    for i, item in enumerate(top_chunks, 1):
+        chunk = item['chunk']
+        similarity = item['similarity']
+        context_text += f"{i}. {chunk.text}\n\n"
+        retrieved_chunks.append({
+            'id': chunk.id,
+            'text': chunk.text,
+            'similarity': round(similarity, 3),
+            'document_title': chunk.document.title
+        })
+    
+    print(f"✅ Context prepared - {len(retrieved_chunks)} chunks, {len(context_text)} characters")
+    
+    # Generate response using the retrieved context
+    print(f"\n🤖 GENERATING RESPONSE")
+    response = generate_response(query, context_text)
+    print(f"✅ Response generated - {len(response)} characters")
+    
+    print(f"\n🎉 RAG QUERY COMPLETE")
+    print("="*60)
+    
+    return response, retrieved_chunks
+
+
+def generate_response(query, context):
+    """Generate response based on query and retrieved context"""
+    print(f"\n💬 RESPONSE GENERATION")
+    print(f"📝 Query: '{query}'")
+    print(f"📄 Context length: {len(context)} characters")
+    
+    # Simple template-based response generation
+    # In a real implementation, this would use an LLM API
+    
+    if not context.strip():
+        print("⚠️ No context available - returning default message")
+        return "I couldn't find relevant information in the knowledge base to answer your question."
+    
+    print("✅ Context available - generating template-based response")
+    response = f"""Based on the information in my knowledge base, here's what I found regarding your question: "{query}"
+
+{context.strip()}
+
+This information was retrieved from the most relevant sections of the uploaded documents. If you need more specific details or have follow-up questions, please feel free to ask!"""
+    
+    print(f"✅ Response generated successfully - {len(response)} characters")
+    return response
 
