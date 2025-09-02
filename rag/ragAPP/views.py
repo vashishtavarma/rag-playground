@@ -14,40 +14,80 @@ from .models import Document, TextChunk, ChatSession, ChatMessage
 
 
 
-def clean_text(text: str) -> str:
-    """Lowercase and collapse multiple spaces/newlines."""
-    # Lowercase and split to handle any whitespace, then join with single spaces
-    return ' '.join(text.lower().split())
-
-def parse_basic(text: str) -> str:
-    """Basic parsing with cleaning logic - extract and cleanup text"""
+def parse_document(uploaded_file):
+    """Unified document parsing function for TXT and PDF files"""
     import re
     
-    # Step 1: Normalize to UTF-8 (already handled by file reading)
-    cleaned_text = text
+    if not uploaded_file:
+        return None, "No file provided"
     
-    # Step 2: Remove junk characters
+    filename = uploaded_file.name.lower()
+    raw_text = ""
+    file_type = ""
+    
+    # Extract text based on file type
+    try:
+        if filename.endswith(".txt"):
+            raw_text = uploaded_file.read().decode("utf-8", errors="ignore")
+            file_type = "txt"
+        elif filename.endswith(".pdf"):
+            pdf_reader = PyPDF2.PdfReader(uploaded_file)
+            pages_text = [page.extract_text() or "" for page in pdf_reader.pages]
+            raw_text = "\n".join(pages_text)
+            file_type = "pdf"
+        else:
+            return None, "Unsupported file format. Please upload TXT or PDF files."
+    except Exception as e:
+        return None, f"Error reading file: {str(e)}"
+    
+    if not raw_text.strip():
+        return None, "File appears to be empty or unreadable"
+    
+    # Clean and parse the text
+    cleaned_text = raw_text
+    
+    # Remove junk characters
     cleaned_text = cleaned_text.replace('\x0c', '')  # Remove form feed
     cleaned_text = cleaned_text.replace('\r', '')    # Remove carriage returns
     
-    # Step 3: Fix broken words (hyphenated line breaks)
+    # Fix broken words (hyphenated line breaks)
     cleaned_text = re.sub(r'(\w+)-\s*\n\s*(\w+)', r'\1\2', cleaned_text)
     
-    # Step 4: Replace multiple spaces with single space
+    # Replace multiple spaces with single space
     cleaned_text = re.sub(r' {2,}', ' ', cleaned_text)
     
-    # Step 5: Remove extra newlines (keep max 2 for paragraph separation)
+    # Remove extra newlines (keep max 2 for paragraph separation)
     cleaned_text = re.sub(r'\n{3,}', '\n\n', cleaned_text)
     
-    # Step 6: Strip leading/trailing whitespace from each line
+    # Strip leading/trailing whitespace from each line
     lines = cleaned_text.split('\n')
     cleaned_lines = [line.strip() for line in lines]
     cleaned_text = '\n'.join(cleaned_lines)
     
-    # Step 7: Final cleanup - remove leading/trailing whitespace from entire text
+    # Final cleanup
     cleaned_text = cleaned_text.strip()
     
-    return cleaned_text
+    return cleaned_text, file_type
+
+def clean_text(text: str) -> str:
+    """Simple text cleaning for chunking"""
+    return ' '.join(text.lower().split())
+
+def create_chunks(text: str, chunk_size: int = 200, overlap_size: int = 50) -> list:
+    """Create text chunks with specified size and overlap"""
+    chunks = []
+    start = 0
+    
+    while start < len(text):
+        end = start + chunk_size
+        chunk = text[start:end]
+        if chunk.strip():
+            chunks.append(chunk.strip())
+        start = end - overlap_size
+        if start >= len(text):
+            break
+    
+    return chunks
 
 
 
@@ -61,27 +101,28 @@ def input_parsing(request: HttpRequest):
     """Step 1: Input Parsing - Upload and parse TXT/PDF files"""
     raw_text = None
     parsed_result = None
+    error = None
 
     if request.method == "POST" and request.FILES.get("file"):
         uploaded_file = request.FILES["file"]
-        filename = uploaded_file.name.lower()
         
-        # Read raw text depending on file type
+        # Get raw text first for comparison
+        filename = uploaded_file.name.lower()
         if filename.endswith(".txt"):
             raw_text = uploaded_file.read().decode("utf-8", errors="ignore")
-        elif filename.endswith(".pdf") and PyPDF2 is not None:
-            # Read PDF pages
+        elif filename.endswith(".pdf"):
             pdf_reader = PyPDF2.PdfReader(uploaded_file)
             pages_text = [page.extract_text() or "" for page in pdf_reader.pages]
             raw_text = "\n".join(pages_text)
-        else:
-            raw_text = "Unsupported file format or missing dependency."
-
-        # Apply basic parsing if we have raw text
-        if raw_text:
-            parsed_result = parse_basic(raw_text)
+        
+        # Reset file pointer and use unified parsing function
+        uploaded_file.seek(0)
+        parsed_result, file_type = parse_document(uploaded_file)
+        
+        if parsed_result is None:
+            error = file_type  # file_type contains error message
     
-    # Calculate character reduction for basic parsing
+    # Calculate character reduction
     char_reduction = 0
     if raw_text and parsed_result:
         char_reduction = len(raw_text) - len(parsed_result)
@@ -90,6 +131,7 @@ def input_parsing(request: HttpRequest):
         "raw_text": raw_text,
         "parsed_result": parsed_result,
         "char_reduction": char_reduction,
+        "error": error,
     }
     return render(request, "ragAPP/input_parsing.html", context)
 
@@ -102,45 +144,29 @@ def chunking(request: HttpRequest):
     chunk_size = 200
     overlap_size = 50
     input_method = "file"
+    error = None
     
     if request.method == "POST":
         input_method = request.POST.get("input_method", "file")
-        # Get parameters
         chunk_size = int(request.POST.get("chunk_size", 200))
         overlap_size = int(request.POST.get("overlap_size", 50))
         
         # Get text input
         raw_text = ""
         if request.FILES.get("file"):
-            uploaded_file = request.FILES["file"]
-            filename = uploaded_file.name.lower()
-            if filename.endswith(".txt"):
-                raw_text = uploaded_file.read().decode("utf-8", errors="ignore")
-            elif filename.endswith(".pdf") and PyPDF2 is not None:
-                pdf_reader = PyPDF2.PdfReader(uploaded_file)
-                pages_text = [page.extract_text() or "" for page in pdf_reader.pages]
-                raw_text = "\n".join(pages_text)
+            # Use unified parsing function
+            parsed_text, file_type = parse_document(request.FILES["file"])
+            if parsed_text is None:
+                error = file_type  # Contains error message
+            else:
+                raw_text = parsed_text
         elif request.POST.get("text_input"):
             raw_text = request.POST.get("text_input")
         
-        if raw_text:
-            # Clean the text
+        if raw_text and not error:
             cleaned_text = clean_text(raw_text)
             original_length = len(cleaned_text)
-            
-            # Create chunks with overlap
-            chunks = []
-            start = 0
-            while start < len(cleaned_text):
-                end = start + chunk_size
-                chunk = cleaned_text[start:end]
-                chunks.append(chunk)
-                
-                # Move start position considering overlap
-                start = end - overlap_size
-                if start >= len(cleaned_text):
-                    break
-            
+            chunks = create_chunks(cleaned_text, chunk_size, overlap_size)
             total_chunks = len(chunks)
     
     context = {
@@ -150,6 +176,7 @@ def chunking(request: HttpRequest):
         "chunk_size": chunk_size,
         "overlap_size": overlap_size,
         "input_method": input_method,
+        "error": error,
     }
     return render(request, "ragAPP/chunking.html", context)
 
@@ -160,95 +187,61 @@ def vector_embedding(request: HttpRequest):
     
     embeddings = None
     total_chunks = 0
-    vector_dimensions = 384  # Fixed dimension for BAAI/bge-small-en
-    model_name = "BAAI/bge-small-en"  # Fixed model
+    vector_dimensions = 384
+    model_name = "BAAI/bge-small-en"
     input_method = "file"
+    error = None
     
     if request.method == "POST":
         input_method = request.POST.get("input_method", "file")
-        raw_text = ""
         chunks = []
         
         if request.FILES.get("file"):
-            uploaded_file = request.FILES["file"]
-            filename = uploaded_file.name.lower()
-            if filename.endswith(".txt"):
-                raw_text = uploaded_file.read().decode("utf-8", errors="ignore")
-            elif filename.endswith(".pdf") and PyPDF2 is not None:
-                pdf_reader = PyPDF2.PdfReader(uploaded_file)
-                pages_text = [page.extract_text() or "" for page in pdf_reader.pages]
-                raw_text = "\n".join(pages_text)
-            
-            if raw_text:
-                # Clean and chunk the text
-                cleaned_text = clean_text(raw_text)
-                # Simple chunking (200 chars with 50 overlap)
-                start = 0
-                while start < len(cleaned_text):
-                    end = start + 200
-                    chunk = cleaned_text[start:end]
-                    if chunk.strip():
-                        chunks.append(chunk.strip())
-                    start = end - 50
-                    if start >= len(cleaned_text):
-                        break
+            # Use unified parsing function
+            parsed_text, file_type = parse_document(request.FILES["file"])
+            if parsed_text is None:
+                error = file_type  # Contains error message
+            else:
+                cleaned_text = clean_text(parsed_text)
+                chunks = create_chunks(cleaned_text)
                         
         elif request.POST.get("text_input"):
             raw_text = request.POST.get("text_input")
             cleaned_text = clean_text(raw_text)
-            # Simple chunking
-            start = 0
-            while start < len(cleaned_text):
-                end = start + 200
-                chunk = cleaned_text[start:end]
-                if chunk.strip():
-                    chunks.append(chunk.strip())
-                start = end - 50
-                if start >= len(cleaned_text):
-                    break
+            chunks = create_chunks(cleaned_text)
                     
         elif request.POST.get("lines_input"):
             lines_text = request.POST.get("lines_input")
-            # Each line becomes a chunk
             lines = lines_text.split('\n')
             for line in lines:
                 cleaned_line = clean_text(line)
                 if cleaned_line.strip():
                     chunks.append(cleaned_line.strip())
         
-        if chunks:
-            print(f"🚀 Starting embedding process for {len(chunks)} chunks...")
-            
-            # Initialize the FastEmbed model
-            print(f"📦 Loading FastEmbed model: {model_name}")
-            model = TextEmbedding(model_name=model_name)
-            print("✅ Model loaded successfully!")
-            
-            embeddings = []
-            total_chunks = len(chunks)
-            
-            # Generate embeddings for all chunks at once (FastEmbed is optimized for batch processing)
-            print(f"🔄 Processing {total_chunks} chunks...")
-            vectors = list(model.embed(chunks))
-            
-            for i, (chunk, vector) in enumerate(zip(chunks, vectors), 1):
-                # print(f"  📝 Processing chunk {i}/{total_chunks}: '{chunk[:50]}{'...' if len(chunk) > 50 else ''}'")
+        if chunks and not error:
+            try:
+                print(f"🚀 Starting embedding process for {len(chunks)} chunks...")
                 
-                # Convert numpy array to list and round to 6 decimal places
-                vector_list = [round(float(x), 6) for x in vector]
+                model = TextEmbedding(model_name=model_name)
+                print("✅ Model loaded successfully!")
                 
-                embeddings.append({
-                    'text': chunk,
-                    'vector': vector_list
-                })
+                embeddings = []
+                total_chunks = len(chunks)
+                vectors = list(model.embed(chunks))
                 
-                # print(f"  ✅ Chunk {i} embedded successfully ({len(vector_list)} dimensions)")
-            
-            # Update vector_dimensions based on actual embedding size
-            if embeddings:
-                vector_dimensions = len(embeddings[0]['vector'])
-            
-            print(f"🎉 All {total_chunks} chunks processed successfully!")
+                for i, (chunk, vector) in enumerate(zip(chunks, vectors), 1):
+                    vector_list = [round(float(x), 6) for x in vector]
+                    embeddings.append({
+                        'text': chunk,
+                        'vector': vector_list
+                    })
+                
+                if embeddings:
+                    vector_dimensions = len(embeddings[0]['vector'])
+                
+                print(f"🎉 All {total_chunks} chunks processed successfully!")
+            except Exception as e:
+                error = f"Error generating embeddings: {str(e)}"
     
     context = {
         "embeddings": embeddings,
@@ -256,14 +249,14 @@ def vector_embedding(request: HttpRequest):
         "vector_dimensions": vector_dimensions,
         "model_name": model_name,
         "input_method": input_method,
+        "error": error,
     }
     return render(request, "ragAPP/vector_embedding.html", context)
 
 
 def vector_storage(request: HttpRequest):
     """Step 4: Vector Storage - Complete Pipeline Demo"""
-    import random
-    import PyPDF2
+    from fastembed import TextEmbedding
     
     # Initialize session storage for vectors if not exists
     if 'vector_storage' not in request.session:
@@ -281,59 +274,33 @@ def vector_storage(request: HttpRequest):
             input_method = request.POST.get("input_method", "file")
             raw_text = ""
             
-            # Step 1: Input Parsing
+            # Use unified parsing
             if request.FILES.get("file"):
-                uploaded_file = request.FILES["file"]
-                filename = uploaded_file.name.lower()
-                if filename.endswith(".txt"):
-                    raw_text = uploaded_file.read().decode("utf-8", errors="ignore")
-                elif filename.endswith(".pdf") and PyPDF2 is not None:
-                    pdf_reader = PyPDF2.PdfReader(uploaded_file)
-                    pages_text = [page.extract_text() or "" for page in pdf_reader.pages]
-                    raw_text = "\n".join(pages_text)
+                parsed_text, file_type = parse_document(request.FILES["file"])
+                if parsed_text is None:
+                    error = f"❌ {file_type}"  # file_type contains error message
                 else:
-                    error = "❌ Unsupported file format. Please upload TXT or PDF files."
+                    raw_text = parsed_text
             elif request.POST.get("text_input"):
                 raw_text = request.POST.get("text_input")
             else:
                 error = "❌ Please provide either a file or text input"
             
             if raw_text and not error:
-                # Step 2: Text Cleaning
                 cleaned_text = clean_text(raw_text)
-                
-                # Step 3: Chunking (200 chars with 50 overlap)
-                chunks = []
-                chunk_size = 200
-                overlap_size = 50
-                start = 0
-                
-                while start < len(cleaned_text):
-                    end = start + chunk_size
-                    chunk = cleaned_text[start:end]
-                    if chunk.strip():
-                        chunks.append(chunk.strip())
-                    start = end - overlap_size
-                    if start >= len(cleaned_text):
-                        break
+                chunks = create_chunks(cleaned_text)
                 
                 if chunks:
-                    print(f"🚀 Processing {len(chunks)} chunks for vector storage...")
-                    
-                    # Step 4: Generate FastEmbed embeddings and store
                     try:
-                        from fastembed import TextEmbedding
+                        print(f"🚀 Processing {len(chunks)} chunks for vector storage...")
                         
-                        print("📦 Loading FastEmbed model: BAAI/bge-small-en")
                         model = TextEmbedding(model_name="BAAI/bge-small-en")
                         print("✅ FastEmbed model loaded successfully!")
                         
-                        print(f"🧠 Generating embeddings for {len(chunks)} chunks...")
                         vectors = list(model.embed(chunks))
                         print(f"✅ Generated {len(vectors)} embedding vectors")
                         
                         for i, (chunk, vector) in enumerate(zip(chunks, vectors)):
-                            # Convert numpy array to list and round to 6 decimal places
                             vector_list = [round(float(x), 6) for x in vector]
                             vector_id = len(stored_vectors) + 1
                             
@@ -343,22 +310,18 @@ def vector_storage(request: HttpRequest):
                                 'embedding': vector_list,
                                 'dimensions': len(vector_list)
                             })
-                            print(f"  ✅ Chunk {i+1}/{len(chunks)} embedded - ID: {vector_id}, Dims: {len(vector_list)}")
                         
                         request.session['vector_storage'] = stored_vectors
                         request.session.modified = True
                         
                         message = f"✅ Successfully processed and stored {len(chunks)} text chunks with FastEmbed embeddings ({len(vectors[0])}D each)"
-                        print(f"🎉 Stored {len(chunks)} vectors with real embeddings in session storage!")
                         
                     except Exception as e:
                         error = f"❌ Error generating embeddings: {str(e)}"
-                        print(f"❌ EMBEDDING ERROR: {str(e)}")
                 else:
                     error = "❌ No valid chunks were generated from the input text"
                     
         elif action == "clear_all":
-            # Clear all stored vectors
             request.session['vector_storage'] = []
             stored_vectors = []
             message = "✅ All vectors cleared from storage"
@@ -375,44 +338,28 @@ def vector_storage(request: HttpRequest):
 
 def retrieval(request: HttpRequest):
     """Step 5: Retrieval - Query Processing and Similarity Search Demo"""
-    import random
-    import math
-    
     # Get stored vectors from session
     stored_vectors = request.session.get('vector_storage', [])
-    
-    # Demo query and processing
     demo_query = "What is RAG?"
-    query_embedding = [round(random.uniform(-1.0, 1.0), 6) for _ in range(384)]
     
-    # Simulate similarity search results
-    retrieved_chunks = []
+    # Use unified similarity search
+    retrieved_chunks = similarity_search(demo_query, stored_vectors)
+    
+    # Get query embedding for display
+    query_embedding = []
     if stored_vectors:
-        # Simulate finding top 3 most similar chunks
-        # In reality, this would use cosine similarity calculation
-        num_results = min(3, len(stored_vectors))
-        selected_indices = random.sample(range(len(stored_vectors)), num_results)
-        
-        for i, idx in enumerate(selected_indices):
-            vector = stored_vectors[idx]
-            # Simulate similarity scores (higher = more similar)
-            similarity_score = round(random.uniform(0.7, 0.95), 3)
-            
-            retrieved_chunks.append({
-                'rank': i + 1,
-                'chunk_id': vector['id'],
-                'text': vector['text'],
-                'similarity_score': similarity_score,
-                'embedding': vector['embedding'][:10]  # Show first 10 dimensions only
-            })
-        
-        # Sort by similarity score (highest first)
-        retrieved_chunks.sort(key=lambda x: x['similarity_score'], reverse=True)
+        try:
+            from fastembed import TextEmbedding
+            model = TextEmbedding(model_name="BAAI/bge-small-en")
+            query_vectors = list(model.embed([demo_query]))
+            query_embedding = [round(float(x), 6) for x in query_vectors[0]]
+        except Exception as e:
+            print(f"Error generating query embedding: {str(e)}")
     
     context = {
         "demo_query": demo_query,
-        "query_embedding": query_embedding[:10],  # Show first 10 dimensions
-        "full_query_embedding": query_embedding,
+        "query_embedding": query_embedding[:10] if query_embedding else [],
+        "full_query_embedding": query_embedding or [],
         "total_stored_vectors": len(stored_vectors),
         "retrieved_chunks": retrieved_chunks,
         "has_stored_vectors": len(stored_vectors) > 0,
@@ -422,34 +369,79 @@ def retrieval(request: HttpRequest):
 
 def augmentation(request: HttpRequest):
     """Step 6: Augmentation - Prompt Construction Demo"""
-    import random
-    
     # Get stored vectors from session
     stored_vectors = request.session.get('vector_storage', [])
-    
-    # Demo query (same as retrieval step)
     demo_query = "What is RAG?"
     
-    # Simulate retrieved chunks (top 3 most relevant)
-    retrieved_chunks = []
-    if stored_vectors:
-        # Simulate the same retrieval results as Step 5
-        num_results = min(3, len(stored_vectors))
-        selected_indices = random.sample(range(len(stored_vectors)), num_results)
+    # Use unified similarity search
+    retrieved_chunks = similarity_search(demo_query, stored_vectors)
+    
+    # Create augmented prompt
+    augmented_prompt = f"""User Question: {demo_query}
+                        Context:
+                        """
+    
+    for i, chunk in enumerate(retrieved_chunks, 1):
+        augmented_prompt += f"{i}. {chunk['text']}\n"
+    
+    augmented_prompt += f"""Please answer the user's question using the provided context. If the context doesn't contain relevant information, say so clearly."""
+    
+    context = {
+        "demo_query": demo_query,
+        "retrieved_chunks": retrieved_chunks,
+        "augmented_prompt": augmented_prompt,
+        "total_stored_vectors": len(stored_vectors),
+        "has_stored_vectors": len(stored_vectors) > 0,
+    }
+    return render(request, "ragAPP/augmentation.html", context)
+
+
+def similarity_search(query, stored_vectors, top_k=3):
+    """Unified similarity search function"""
+    if not stored_vectors:
+        return []
+    
+    try:
+        from fastembed import TextEmbedding
+        model = TextEmbedding(model_name="BAAI/bge-small-en")
+        query_vectors = list(model.embed([query]))
+        query_embedding = [round(float(x), 6) for x in query_vectors[0]]
         
-        for i, idx in enumerate(selected_indices):
-            vector = stored_vectors[idx]
-            similarity_score = round(random.uniform(0.7, 0.95), 3)
-            
+        # Calculate similarities
+        similarities = []
+        for vector in stored_vectors:
+            query_vec = np.array(query_embedding)
+            stored_vec = np.array(vector['embedding'])
+            similarity = np.dot(query_vec, stored_vec) / (np.linalg.norm(query_vec) * np.linalg.norm(stored_vec))
+            similarities.append((vector, float(similarity)))
+        
+        # Sort by similarity and get top results
+        similarities.sort(key=lambda x: x[1], reverse=True)
+        top_results = similarities[:top_k]
+        
+        retrieved_chunks = []
+        for i, (vector, similarity) in enumerate(top_results):
             retrieved_chunks.append({
                 'rank': i + 1,
                 'chunk_id': vector['id'],
                 'text': vector['text'],
-                'similarity_score': similarity_score
+                'similarity_score': round(similarity, 3),
+                'embedding': vector['embedding'][:10]  # Show first 10 dimensions only
             })
         
-        # Sort by similarity score (highest first)
-        retrieved_chunks.sort(key=lambda x: x['similarity_score'], reverse=True)
+        return retrieved_chunks
+    except Exception as e:
+        print(f"Error in similarity search: {str(e)}")
+        return []
+
+def generation(request: HttpRequest):
+    """Step 7: Generation - LLM Response Generation Demo"""
+    # Get stored vectors from session
+    stored_vectors = request.session.get('vector_storage', [])
+    demo_query = "What is RAG?"
+    
+    # Use unified similarity search
+    retrieved_chunks = similarity_search(demo_query, stored_vectors)
     
     # Create augmented prompt
     augmented_prompt = f"""User Question: {demo_query}
@@ -463,63 +455,8 @@ Context:
     augmented_prompt += f"""
 Please answer the user's question using the provided context. If the context doesn't contain relevant information, say so clearly."""
     
-    context = {
-        "demo_query": demo_query,
-        "retrieved_chunks": retrieved_chunks,
-        "augmented_prompt": augmented_prompt,
-        "total_stored_vectors": len(stored_vectors),
-        "has_stored_vectors": len(stored_vectors) > 0,
-    }
-    return render(request, "ragAPP/augmentation.html", context)
-
-
-def generation(request: HttpRequest):
-    """Step 7: Generation - LLM Response Generation Demo"""
-    import random
-    
-    # Get stored vectors from session
-    stored_vectors = request.session.get('vector_storage', [])
-    
-    # Demo query (consistent with previous steps)
-    demo_query = "What is RAG?"
-    
-    # Simulate retrieved chunks (same as augmentation step)
-    retrieved_chunks = []
-    if stored_vectors:
-        num_results = min(3, len(stored_vectors))
-        selected_indices = random.sample(range(len(stored_vectors)), num_results)
-        
-        for i, idx in enumerate(selected_indices):
-            vector = stored_vectors[idx]
-            similarity_score = round(random.uniform(0.7, 0.95), 3)
-            
-            retrieved_chunks.append({
-                'rank': i + 1,
-                'chunk_id': vector['id'],
-                'text': vector['text'],
-                'similarity_score': similarity_score
-            })
-        
-        retrieved_chunks.sort(key=lambda x: x['similarity_score'], reverse=True)
-    
-    # Create augmented prompt (same as augmentation step)
-    augmented_prompt = f"""User Question: {demo_query}
-
-Context:
-"""
-    
-    for i, chunk in enumerate(retrieved_chunks, 1):
-        augmented_prompt += f"{i}. {chunk['text']}\n"
-    
-    augmented_prompt += f"""
-Please answer the user's question using the provided context. If the context doesn't contain relevant information, say so clearly."""
-    
-    # Generate a realistic LLM response
-    llm_response = """RAG (Retrieval Augmented Generation) is a powerful AI technique that combines the strengths of information retrieval systems with large language models. 
-
-Based on the provided context, RAG works by first retrieving relevant information from a knowledge base or document collection, then using that retrieved context to augment the language model's generation process. This approach helps ensure that the generated responses are more accurate, factual, and grounded in specific source material.
-
-The key advantage of RAG is that it allows language models to access and utilize external knowledge beyond what was learned during training, making responses more reliable and up-to-date. This is particularly valuable for applications requiring factual accuracy or domain-specific knowledge."""
+    # Generate response using the existing generate_response function
+    llm_response = generate_response(demo_query, "\n".join([chunk['text'] for chunk in retrieved_chunks]))
     
     context = {
         "demo_query": demo_query,
@@ -570,38 +507,14 @@ def knowledge_base(request: HttpRequest):
                 error = "❌ Please select a file to upload"
                 print("❌ ERROR: No file uploaded")
             else:
-                filename = uploaded_file.name.lower()
-                print(f"🔍 Processing file: {filename}")
+                # Use unified parsing function
+                cleaned_text, file_type = parse_document(uploaded_file)
                 
-                # Process file content
-                raw_text = ""
-                file_type = ""
-                
-                if filename.endswith(".txt"):
-                    print("📄 Detected TXT file - reading content...")
-                    raw_text = uploaded_file.read().decode("utf-8", errors="ignore")
-                    file_type = "txt"
-                    print(f"✅ TXT file read successfully - {len(raw_text)} characters")
-                elif filename.endswith(".pdf"):
-                    print("📕 Detected PDF file - extracting text...")
-                    try:
-                        pdf_reader = PyPDF2.PdfReader(uploaded_file)
-                        pages_text = [page.extract_text() or "" for page in pdf_reader.pages]
-                        raw_text = "\n".join(pages_text)
-                        file_type = "pdf"
-                        print(f"✅ PDF processed successfully - {len(pdf_reader.pages)} pages, {len(raw_text)} characters")
-                    except Exception as e:
-                        error = f"❌ Error reading PDF: {str(e)}"
-                        print(f"❌ PDF ERROR: {str(e)}")
+                if cleaned_text is None:
+                    error = f"❌ {file_type}"  # file_type contains error message
+                    print(f"❌ ERROR: {file_type}")
                 else:
-                    error = "❌ Unsupported file format. Please upload TXT or PDF files."
-                    print(f"❌ ERROR: Unsupported file format: {filename}")
-                
-                if raw_text and not error:
-                    print(f"\n🧹 CLEANING TEXT - Original length: {len(raw_text)} characters")
-                    # Clean the text
-                    cleaned_text = parse_basic(raw_text)
-                    print(f"✅ Text cleaned - New length: {len(cleaned_text)} characters")
+                    print(f"✅ File processed successfully - {len(cleaned_text)} characters")
                     
                     print(f"\n💾 CREATING DOCUMENT RECORD")
                     # Create document
@@ -651,33 +564,15 @@ def process_document_chunks(document):
     from fastembed import TextEmbedding
     
     print("📦 Loading FastEmbed model: BAAI/bge-small-en")
-    # Initialize FastEmbed model
     model = TextEmbedding(model_name="BAAI/bge-small-en")
     print("✅ FastEmbed model loaded successfully")
     
-    # Create chunks
-    chunks = []
-    chunk_size = 200
-    overlap_size = 50
-    start = 0
-    chunk_index = 0
-    
-    print(f"⚙️ Chunking parameters: size={chunk_size}, overlap={overlap_size}")
-    
+    # Use unified chunking function
     cleaned_text = clean_text(document.content)
     print(f"📏 Cleaned text length: {len(cleaned_text)} characters")
     
     print("\n✂️ CREATING TEXT CHUNKS")
-    while start < len(cleaned_text):
-        end = start + chunk_size
-        chunk_text = cleaned_text[start:end]
-        if chunk_text.strip():
-            chunks.append(chunk_text.strip())
-            print(f"  📄 Chunk {len(chunks)}: {len(chunk_text)} chars - '{chunk_text[:50]}{'...' if len(chunk_text) > 50 else ''}'")
-        start = end - overlap_size
-        if start >= len(cleaned_text):
-            break
-    
+    chunks = create_chunks(cleaned_text)
     print(f"✅ Created {len(chunks)} text chunks")
     
     # Generate embeddings for all chunks
@@ -776,83 +671,58 @@ def chat_query(request: HttpRequest):
 
 
 def perform_rag_query(query):
-    """Perform RAG query using FastEmbed for similarity search"""
+    """Perform RAG query using database chunks and FastEmbed for similarity search"""
     print(f"\n" + "="*60)
     print(f"🔍 RAG QUERY PROCESSING - Query: '{query}'")
     print("="*60)
     
-    from fastembed import TextEmbedding
-    
-    print("📦 Loading FastEmbed model for query processing...")
-    # Initialize FastEmbed model
-    model = TextEmbedding(model_name="BAAI/bge-small-en")
-    print("✅ FastEmbed model loaded")
-    
-    print(f"\n🧠 GENERATING QUERY EMBEDDING")
-    # Generate query embedding
-    query_embedding = list(model.embed([query]))[0]
-    query_vector = np.array(query_embedding)
-    print(f"✅ Query embedded - Vector dimensions: {len(query_embedding)}")
-    
-    # Get all chunks with embeddings
+    # Get all chunks with embeddings from database
     chunks = TextChunk.objects.all()
-    print(f"\n📊 KNOWLEDGE BASE STATUS")
     print(f"📄 Total chunks in database: {chunks.count()}")
     
     if not chunks.exists():
         print("⚠️ No chunks found in knowledge base")
         return "I don't have any documents in my knowledge base yet. Please upload some documents first.", []
     
-    print(f"\n🔄 CALCULATING SIMILARITIES for {chunks.count()} chunks")
-    # Calculate similarities
-    similarities = []
-    for i, chunk in enumerate(chunks, 1):
-        chunk_vector = np.array(chunk.embedding)
-        # Cosine similarity
-        similarity = np.dot(query_vector, chunk_vector) / (np.linalg.norm(query_vector) * np.linalg.norm(chunk_vector))
-        similarities.append({
-            'chunk': chunk,
-            'similarity': float(similarity)
+    # Convert database chunks to format expected by similarity_search
+    stored_vectors = []
+    for chunk in chunks:
+        stored_vectors.append({
+            'id': chunk.id,
+            'text': chunk.text,
+            'embedding': chunk.embedding
         })
-        print(f"  📊 Chunk {i}: Similarity = {similarity:.4f} - '{chunk.text[:50]}{'...' if len(chunk.text) > 50 else ''}'")
     
-    # Sort by similarity and get top 3
-    similarities.sort(key=lambda x: x['similarity'], reverse=True)
-    top_chunks = similarities[:3]
-    
-    print(f"\n🏆 TOP 3 MOST SIMILAR CHUNKS:")
-    for i, item in enumerate(top_chunks, 1):
-        chunk = item['chunk']
-        similarity = item['similarity']
-        print(f"  {i}. Similarity: {similarity:.4f} | Doc: '{chunk.document.title}' | Text: '{chunk.text[:80]}{'...' if len(chunk.text) > 80 else ''}'")
+    # Use unified similarity search function
+    print(f"🔄 Performing similarity search...")
+    retrieved_chunks = similarity_search(query, stored_vectors)
     
     # Prepare context for response
     context_text = ""
-    retrieved_chunks = []
+    db_retrieved_chunks = []
     
     print(f"\n📝 PREPARING CONTEXT FOR RESPONSE")
-    for i, item in enumerate(top_chunks, 1):
-        chunk = item['chunk']
-        similarity = item['similarity']
+    for i, chunk_data in enumerate(retrieved_chunks, 1):
+        chunk = TextChunk.objects.get(id=chunk_data['chunk_id'])
         context_text += f"{i}. {chunk.text}\n\n"
-        retrieved_chunks.append({
+        db_retrieved_chunks.append({
             'id': chunk.id,
             'text': chunk.text,
-            'similarity': round(similarity, 3),
+            'similarity': chunk_data['similarity_score'],
             'document_title': chunk.document.title
         })
     
-    print(f"✅ Context prepared - {len(retrieved_chunks)} chunks, {len(context_text)} characters")
+    print(f"✅ Context prepared - {len(db_retrieved_chunks)} chunks")
     
     # Generate response using the retrieved context
     print(f"\n🤖 GENERATING RESPONSE")
     response = generate_response(query, context_text)
-    print(f"✅ Response generated - {len(response)} characters")
+    print(f"✅ Response generated")
     
     print(f"\n🎉 RAG QUERY COMPLETE")
     print("="*60)
     
-    return response, retrieved_chunks
+    return response, db_retrieved_chunks
 
 
 def generate_response(query, context):
