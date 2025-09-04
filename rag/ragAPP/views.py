@@ -9,6 +9,7 @@ import json
 import uuid
 import numpy as np
 from .models import Document, TextChunk, ChatSession, ChatMessage
+import re
 
 
 
@@ -99,15 +100,25 @@ def chunking(request: HttpRequest):
     chunks = None
     original_length = 0
     total_chunks = 0
-    chunk_size = 200
-    overlap_size = 50
+    # Default to sentence-based chunking: 5 sentences per chunk, 2 sentence overlap
+    chunk_size = 5
+    overlap_size = 2
     input_method = "file"
     
     if request.method == "POST":
         input_method = request.POST.get("input_method", "file")
         # Get parameters
-        chunk_size = int(request.POST.get("chunk_size", 200))
-        overlap_size = int(request.POST.get("overlap_size", 50))
+        chunk_size = int(request.POST.get("chunk_size", 5))
+        overlap_size = int(request.POST.get("overlap_size", 2))
+
+        # Enforce sensible bounds: chunk_size must be > 2 sentences
+        if chunk_size <= 2:
+            chunk_size = 3
+        # Overlap cannot be negative or >= chunk_size
+        if overlap_size < 0:
+            overlap_size = 0
+        if overlap_size >= chunk_size:
+            overlap_size = max(0, chunk_size - 1)
         
         # Get text input
         raw_text = ""
@@ -127,18 +138,25 @@ def chunking(request: HttpRequest):
             # Clean the text
             cleaned_text = clean_text(raw_text)
             original_length = len(cleaned_text)
-            
-            # Create chunks with overlap
+
+            # Split into sentences using basic punctuation boundaries
+            sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', cleaned_text) if s.strip()]
+
+            # Create sentence-based chunks with overlap
             chunks = []
             start = 0
-            while start < len(cleaned_text):
+            while start < len(sentences):
                 end = start + chunk_size
-                chunk = cleaned_text[start:end]
-                chunks.append(chunk)
-                
-                # Move start position considering overlap
+                chunk_sentences = sentences[start:end]
+                if not chunk_sentences:
+                    break
+                chunk_text = " ".join(chunk_sentences).strip()
+                if chunk_text:
+                    chunks.append(chunk_text)
+
+                # Move start index considering sentence overlap
                 start = end - overlap_size
-                if start >= len(cleaned_text):
+                if start >= len(sentences):
                     break
             
             total_chunks = len(chunks)
@@ -180,31 +198,41 @@ def vector_embedding(request: HttpRequest):
                 raw_text = "\n".join(pages_text)
             
             if raw_text:
-                # Clean and chunk the text
+                # Clean and chunk the text (5-sentence chunks, 1-sentence overlap)
                 cleaned_text = clean_text(raw_text)
-                # Simple chunking (200 chars with 50 overlap)
+                sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', cleaned_text) if s.strip()]
+                sentence_chunk_size = 5
+                sentence_overlap = 1
                 start = 0
-                while start < len(cleaned_text):
-                    end = start + 200
-                    chunk = cleaned_text[start:end]
-                    if chunk.strip():
-                        chunks.append(chunk.strip())
-                    start = end - 50
-                    if start >= len(cleaned_text):
+                while start < len(sentences):
+                    end = start + sentence_chunk_size
+                    chunk_sentences = sentences[start:end]
+                    if not chunk_sentences:
+                        break
+                    chunk_text = " ".join(chunk_sentences).strip()
+                    if chunk_text:
+                        chunks.append(chunk_text)
+                    start = end - sentence_overlap
+                    if start >= len(sentences):
                         break
                         
         elif request.POST.get("text_input"):
             raw_text = request.POST.get("text_input")
             cleaned_text = clean_text(raw_text)
-            # Simple chunking
+            sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', cleaned_text) if s.strip()]
+            sentence_chunk_size = 5
+            sentence_overlap = 1
             start = 0
-            while start < len(cleaned_text):
-                end = start + 200
-                chunk = cleaned_text[start:end]
-                if chunk.strip():
-                    chunks.append(chunk.strip())
-                start = end - 50
-                if start >= len(cleaned_text):
+            while start < len(sentences):
+                end = start + sentence_chunk_size
+                chunk_sentences = sentences[start:end]
+                if not chunk_sentences:
+                    break
+                chunk_text = " ".join(chunk_sentences).strip()
+                if chunk_text:
+                    chunks.append(chunk_text)
+                start = end - sentence_overlap
+                if start >= len(sentences):
                     break
                     
         elif request.POST.get("lines_input"):
@@ -302,19 +330,22 @@ def vector_storage(request: HttpRequest):
                 # Step 2: Text Cleaning
                 cleaned_text = clean_text(raw_text)
                 
-                # Step 3: Chunking (200 chars with 50 overlap)
+                # Step 3: Sentence-based chunking (5 sentences, 1 overlap)
                 chunks = []
-                chunk_size = 200
-                overlap_size = 50
+                sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', cleaned_text) if s.strip()]
+                sentence_chunk_size = 5
+                sentence_overlap = 1
                 start = 0
-                
-                while start < len(cleaned_text):
-                    end = start + chunk_size
-                    chunk = cleaned_text[start:end]
-                    if chunk.strip():
-                        chunks.append(chunk.strip())
-                    start = end - overlap_size
-                    if start >= len(cleaned_text):
+                while start < len(sentences):
+                    end = start + sentence_chunk_size
+                    chunk_sentences = sentences[start:end]
+                    if not chunk_sentences:
+                        break
+                    chunk_text = " ".join(chunk_sentences).strip()
+                    if chunk_text:
+                        chunks.append(chunk_text)
+                    start = end - sentence_overlap
+                    if start >= len(sentences):
                         break
                 
                 if chunks:
@@ -655,27 +686,31 @@ def process_document_chunks(document):
     model = TextEmbedding(model_name="BAAI/bge-small-en")
     print("✅ FastEmbed model loaded successfully")
     
-    # Create chunks
+    # Create sentence-based chunks
     chunks = []
-    chunk_size = 200
-    overlap_size = 50
-    start = 0
+    sentence_chunk_size = 5
+    sentence_overlap = 1
     chunk_index = 0
     
-    print(f"⚙️ Chunking parameters: size={chunk_size}, overlap={overlap_size}")
+    print(f"⚙️ Chunking parameters: sentences_per_chunk={sentence_chunk_size}, sentence_overlap={sentence_overlap}")
     
     cleaned_text = clean_text(document.content)
     print(f"📏 Cleaned text length: {len(cleaned_text)} characters")
+    sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', cleaned_text) if s.strip()]
     
-    print("\n✂️ CREATING TEXT CHUNKS")
-    while start < len(cleaned_text):
-        end = start + chunk_size
-        chunk_text = cleaned_text[start:end]
-        if chunk_text.strip():
-            chunks.append(chunk_text.strip())
+    print("\n✂️ CREATING TEXT CHUNKS (sentence-based)")
+    start = 0
+    while start < len(sentences):
+        end = start + sentence_chunk_size
+        chunk_sentences = sentences[start:end]
+        if not chunk_sentences:
+            break
+        chunk_text = " ".join(chunk_sentences).strip()
+        if chunk_text:
+            chunks.append(chunk_text)
             print(f"  📄 Chunk {len(chunks)}: {len(chunk_text)} chars - '{chunk_text[:50]}{'...' if len(chunk_text) > 50 else ''}'")
-        start = end - overlap_size
-        if start >= len(cleaned_text):
+        start = end - sentence_overlap
+        if start >= len(sentences):
             break
     
     print(f"✅ Created {len(chunks)} text chunks")
