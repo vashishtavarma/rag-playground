@@ -1,33 +1,16 @@
 from django.contrib import admin
-from .models import Document, TextChunk, ChatSession, ChatMessage
+from .models import Document, ChatSession, ChatMessage
 
 
 @admin.register(Document)
 class DocumentAdmin(admin.ModelAdmin):
-    list_display = ['title', 'file_type', 'processed', 'uploaded_at', 'chunk_count']
+    list_display = ['title', 'file_type', 'processed', 'uploaded_at']
     list_filter = ['file_type', 'processed', 'uploaded_at']
     search_fields = ['title', 'content']
     readonly_fields = ['uploaded_at']
-    
-    def chunk_count(self, obj):
-        return obj.chunks.count()
-    chunk_count.short_description = 'Chunks'
 
 
-@admin.register(TextChunk)
-class TextChunkAdmin(admin.ModelAdmin):
-    list_display = ['id', 'document', 'chunk_index', 'text_preview', 'embedding_dims']
-    list_filter = ['document', 'chunk_index']
-    search_fields = ['text', 'document__title']
-    readonly_fields = ['embedding']
-    
-    def text_preview(self, obj):
-        return obj.text[:100] + "..." if len(obj.text) > 100 else obj.text
-    text_preview.short_description = 'Text Preview'
-    
-    def embedding_dims(self, obj):
-        return len(obj.embedding) if obj.embedding else 0
-    embedding_dims.short_description = 'Embedding Dimensions'
+# TextChunk admin removed - now using ChromaDB for vector storage
 
 
 @admin.register(ChatSession)

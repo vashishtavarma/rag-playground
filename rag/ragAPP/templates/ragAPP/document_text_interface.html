@@ -1,97 +1,149 @@
 {% extends 'ragAPP/base.html' %}
 
-{% block title %}Document Text Interface{% endblock %}
+{% block title %}Document Text Interface - ChromaDB Integration{% endblock %}
+
+{% block nav_extra %}
+<span class="navbar-text">
+  <i class="bi bi-database"></i> ChromaDB Interface
+</span>
+{% endblock %}
 
 {% block content %}
 <!-- Header -->
-<div class="row mb-5">
+<div class="row mb-4">
   <div class="col-12 text-center">
     <h1 class="display-5 step-title mb-3">Document Text Interface</h1>
-    <p class="text-muted">Upload documents and chat with your knowledge base</p>
+    <p class="text-muted">Enhanced with ChromaDB Vector Storage</p>
   </div>
 </div>
 
-<!-- Action Cards -->
-<div class="row g-4 mb-5">
-  <!-- Upload Documents Card -->
-  <div class="col-lg-6">
+<!-- Messages -->
+{% if message %}
+<div class="alert alert-success alert-dismissible fade show" role="alert">
+  {{ message }}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+{% if error %}
+<div class="alert alert-danger alert-dismissible fade show" role="alert">
+  {{ error }}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+
+<!-- Upload Document Card -->
+<div class="row mb-4">
+  <div class="col-12">
+    <div class="card step-card">
+      <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-cloud-upload me-2"></i>Upload & Process Document</h5>
+      </div>
+      <div class="card-body">
+        <form method="post" enctype="multipart/form-data">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="upload_and_process">
+          
+          <div class="row">
+            <div class="col-md-6">
+              <div class="mb-3">
+                <label for="title" class="form-label">Document Title</label>
+                <input type="text" class="form-control" id="title" name="title" required>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="mb-3">
+                <label for="file" class="form-label">Select File</label>
+                <input type="file" class="form-control" id="file" name="file" accept=".txt,.pdf" required>
+              </div>
+            </div>
+          </div>
+          
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-upload"></i> Upload & Store in ChromaDB
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- Quick Access Cards -->
+<div class="row g-4 mb-4">
+  <div class="col-lg-4">
     <a href="{% url 'knowledge_base' %}" class="text-decoration-none">
       <div class="card h-100 card-hover step-card">
-        <div class="card-body text-center p-5">
-          <div class="mb-4">
-            <i class="bi bi-cloud-upload step-icon" style="font-size: 3.5rem; color: #28a745;"></i>
-          </div>
-          <h3 class="step-title mb-3">Upload Documents</h3>
-          <p class="text-muted mb-4">Upload text or PDF files to build your knowledge base</p>
-          <div class="d-flex justify-content-center gap-3">
-            <span class="badge bg-success">TXT</span>
-            <span class="badge bg-success">PDF</span>
-          </div>
+        <div class="card-body text-center p-4">
+          <i class="bi bi-collection step-icon" style="font-size: 2.5rem; color: #28a745;"></i>
+          <h5 class="step-title mt-3">Knowledge Base</h5>
+          <p class="text-muted">Manage documents</p>
+        </div>
+      </div>
+    </a>
+  </div>
+  
+  <div class="col-lg-4">
+    <a href="{% url 'vector_storage' %}" class="text-decoration-none">
+      <div class="card h-100 card-hover step-card">
+        <div class="card-body text-center p-4">
+          <i class="bi bi-database step-icon" style="font-size: 2.5rem; color: #007bff;"></i>
+          <h5 class="step-title mt-3">Vector Storage</h5>
+          <p class="text-muted">View ChromaDB data</p>
         </div>
       </div>
     </a>
   </div>
 
-  <!-- Chat Interface Card -->
-  <div class="col-lg-6">
+  <div class="col-lg-4">
     <a href="{% url 'chat_interface' %}" class="text-decoration-none">
       <div class="card h-100 card-hover step-card">
-        <div class="card-body text-center p-5">
-          <div class="mb-4">
-            <i class="bi bi-chat-dots step-icon" style="font-size: 3.5rem; color: #007bff;"></i>
-          </div>
-          <h3 class="step-title mb-3">Chat Interface</h3>
-          <p class="text-muted mb-4">Ask questions and get answers from your documents</p>
-          <div class="d-flex justify-content-center gap-3">
-            <span class="badge bg-primary">RAG</span>
-            <span class="badge bg-primary">AI Chat</span>
-          </div>
+        <div class="card-body text-center p-4">
+          <i class="bi bi-chat-dots step-icon" style="font-size: 2.5rem; color: #6f42c1;"></i>
+          <h5 class="step-title mt-3">Chat Interface</h5>
+          <p class="text-muted">Query with AI</p>
         </div>
       </div>
     </a>
   </div>
 </div>
 
-<!-- Features Overview -->
+<!-- Recent Documents -->
+{% if recent_documents %}
 <div class="row">
   <div class="col-12">
     <div class="card step-card">
       <div class="card-header">
-        <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>How It Works</h5>
+        <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Recent Documents</h5>
       </div>
       <div class="card-body">
-        <div class="row g-4">
-          <div class="col-md-4">
-            <div class="text-center">
-              <div class="mb-3">
-                <i class="bi bi-file-earmark-arrow-up" style="font-size: 2rem; color: var(--color-medium);"></i>
+        <div class="row g-3">
+          {% for doc in recent_documents %}
+          <div class="col-md-6">
+            <div class="card border-0 bg-light">
+              <div class="card-body">
+                <h6 class="card-title">{{ doc.title }}</h6>
+                <p class="card-text">
+                  <small class="text-muted">
+                    {{ doc.file_type|upper }} • {{ doc.uploaded_at|date:"M d, Y" }} • 
+                    {% if doc.processed %}
+                      <span class="badge bg-success">Processed</span>
+                    {% else %}
+                      <span class="badge bg-warning">Processing</span>
+                    {% endif %}
+                  </small>
+                </p>
               </div>
-              <h6 class="step-title">1. Upload Documents</h6>
-              <p class="text-muted small">Upload your text or PDF files to the knowledge base</p>
             </div>
           </div>
-          <div class="col-md-4">
-            <div class="text-center">
-              <div class="mb-3">
-                <i class="bi bi-cpu" style="font-size: 2rem; color: var(--color-medium);"></i>
-              </div>
-              <h6 class="step-title">2. AI Processing</h6>
-              <p class="text-muted small">Documents are automatically chunked and embedded using FastEmbed</p>
-            </div>
-          </div>
-          <div class="col-md-4">
-            <div class="text-center">
-              <div class="mb-3">
-                <i class="bi bi-chat-square-text" style="font-size: 2rem; color: var(--color-medium);"></i>
-              </div>
-              <h6 class="step-title">3. Chat & Query</h6>
-              <p class="text-muted small">Ask questions and get contextual answers from your documents</p>
-            </div>
-          </div>
+          {% endfor %}
         </div>
       </div>
     </div>
   </div>
 </div>
+{% endif %}
+
 
 {% endblock %}

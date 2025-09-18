@@ -1,16 +1,12 @@
-from django.shortcuts import render, get_object_or_404
-from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.shortcuts import render
+from django.http import HttpRequest, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from django.utils.decorators import method_decorator
 from django.views.decorators.http import require_http_methods
-import io
 import PyPDF2
 import json
 import uuid
-import numpy as np
-from .models import Document, TextChunk, ChatSession, ChatMessage
-
-
+from .models import Document, ChatSession, ChatMessage
+from .vector_db import get_vector_db
 
 
 
@@ -73,8 +69,8 @@ def clean_text(text: str) -> str:
     """Simple text cleaning for chunking"""
     return ' '.join(text.lower().split())
 
-def create_chunks(text: str, chunk_size: int = 200, overlap_size: int = 50) -> list:
-    """Create text chunks with specified size and overlap"""
+def create_chunks_fixed_size(text: str, chunk_size: int = 200, overlap_size: int = 50) -> list:
+    """Fixed-size chunking: Splits text into chunks of a fixed size with optional overlap"""
     chunks = []
     start = 0
     
@@ -88,6 +84,218 @@ def create_chunks(text: str, chunk_size: int = 200, overlap_size: int = 50) -> l
             break
     
     return chunks
+
+
+def create_chunks_token_based(text: str, max_tokens: int = 100, overlap_tokens: int = 20) -> list:
+    """Token-based chunking: Splits text based on token count (approximated by words)"""
+    words = text.split()
+    chunks = []
+    start = 0
+    
+    while start < len(words):
+        end = start + max_tokens
+        chunk_words = words[start:end]
+        chunk = ' '.join(chunk_words)
+        if chunk.strip():
+            chunks.append(chunk.strip())
+        start = end - overlap_tokens
+        if start >= len(words):
+            break
+    
+    return chunks
+
+
+def create_chunks_recursive(text: str, chunk_size: int = 200, overlap_size: int = 50) -> list:
+    """Recursive chunking: Hierarchical approach using prioritized separators"""
+    separators = ['\n\n', '\n', '. ', '! ', '? ', '; ', ', ', ' ']
+    
+    def split_text_recursive(text, separators, chunk_size):
+        if len(text) <= chunk_size:
+            return [text] if text.strip() else []
+        
+        # Try each separator in order of priority
+        for separator in separators:
+            if separator in text:
+                parts = text.split(separator)
+                chunks = []
+                current_chunk = ""
+                
+                for part in parts:
+                    if len(current_chunk + separator + part) <= chunk_size:
+                        if current_chunk:
+                            current_chunk += separator + part
+                        else:
+                            current_chunk = part
+                    else:
+                        if current_chunk:
+                            chunks.append(current_chunk.strip())
+                        # Recursively split large parts
+                        if len(part) > chunk_size:
+                            chunks.extend(split_text_recursive(part, separators[1:], chunk_size))
+                        else:
+                            current_chunk = part
+                
+                if current_chunk:
+                    chunks.append(current_chunk.strip())
+                
+                return [chunk for chunk in chunks if chunk.strip()]
+        
+        # Fallback to character-based splitting
+        return [text[i:i+chunk_size].strip() for i in range(0, len(text), chunk_size) if text[i:i+chunk_size].strip()]
+    
+    base_chunks = split_text_recursive(text, separators, chunk_size)
+    
+    # Add overlap if specified
+    if overlap_size > 0 and len(base_chunks) > 1:
+        overlapped_chunks = []
+        for i, chunk in enumerate(base_chunks):
+            if i == 0:
+                overlapped_chunks.append(chunk)
+            else:
+                # Add overlap from previous chunk
+                prev_chunk = base_chunks[i-1]
+                overlap = prev_chunk[-overlap_size:] if len(prev_chunk) > overlap_size else prev_chunk
+                overlapped_chunks.append(overlap + " " + chunk)
+        return overlapped_chunks
+    
+    return base_chunks
+
+
+def create_chunks_sentence_based(text: str, sentences_per_chunk: int = 3, overlap_sentences: int = 1) -> list:
+    """Sentence-based chunking: Chunks based on natural sentence boundaries"""
+    import re
+    
+    # Split into sentences using regex
+    sentence_endings = r'[.!?]+'
+    sentences = re.split(f'({sentence_endings})', text)
+    
+    # Reconstruct sentences with their endings
+    reconstructed_sentences = []
+    i = 0
+    while i < len(sentences):
+        sentence = sentences[i].strip()
+        if i + 1 < len(sentences) and re.match(sentence_endings, sentences[i + 1]):
+            sentence += sentences[i + 1]
+            i += 2
+        else:
+            i += 1
+        if sentence.strip():
+            reconstructed_sentences.append(sentence.strip())
+    
+    # Group sentences into chunks
+    chunks = []
+    start = 0
+    
+    while start < len(reconstructed_sentences):
+        end = start + sentences_per_chunk
+        chunk_sentences = reconstructed_sentences[start:end]
+        chunk = ' '.join(chunk_sentences)
+        if chunk.strip():
+            chunks.append(chunk.strip())
+        start = end - overlap_sentences
+        if start >= len(reconstructed_sentences):
+            break
+    
+    return chunks
+
+
+def create_chunks_semantic(text: str, similarity_threshold: float = 0.7, min_chunk_size: int = 50) -> list:
+    """Semantic chunking: Uses embeddings to split text based on semantic meaning"""
+    try:
+        from fastembed import TextEmbedding
+        import numpy as np
+        from sklearn.metrics.pairwise import cosine_similarity
+        
+        # Split text into sentences first
+        import re
+        sentences = re.split(r'[.!?]+', text)
+        sentences = [s.strip() for s in sentences if s.strip()]
+        
+        if len(sentences) < 2:
+            return [text] if text.strip() else []
+        
+        # Generate embeddings for each sentence
+        model = TextEmbedding(model_name="BAAI/bge-small-en")
+        embeddings = list(model.embed(sentences))
+        embeddings = np.array(embeddings)
+        
+        # Find breakpoints based on semantic similarity
+        breakpoints = [0]
+        
+        for i in range(1, len(sentences)):
+            # Calculate similarity between current and previous sentence
+            similarity = cosine_similarity([embeddings[i-1]], [embeddings[i]])[0][0]
+            
+            # If similarity is below threshold, create a breakpoint
+            if similarity < similarity_threshold:
+                breakpoints.append(i)
+        
+        breakpoints.append(len(sentences))
+        
+        # Create chunks based on breakpoints
+        chunks = []
+        for i in range(len(breakpoints) - 1):
+            start = breakpoints[i]
+            end = breakpoints[i + 1]
+            chunk_sentences = sentences[start:end]
+            chunk = '. '.join(chunk_sentences)
+            if len(chunk) >= min_chunk_size:
+                chunks.append(chunk)
+        
+        return chunks if chunks else [text]
+        
+    except Exception as e:
+        print(f"Error in semantic chunking: {e}")
+        # Fallback to sentence-based chunking
+        return create_chunks_sentence_based(text)
+
+
+def create_chunks_hierarchical(text: str, chunk_size: int = 200, levels: int = 2) -> dict:
+    """Hierarchical chunking: Creates chunks at multiple levels of granularity"""
+    result = {}
+    
+    # Level 1: Large chunks (sections)
+    large_chunk_size = chunk_size * 3
+    level1_chunks = create_chunks_recursive(text, large_chunk_size, large_chunk_size // 4)
+    result['level_1'] = {
+        'chunks': level1_chunks,
+        'description': f'Large sections (~{large_chunk_size} chars)',
+        'count': len(level1_chunks)
+    }
+    
+    # Level 2: Medium chunks (subsections)
+    medium_chunk_size = chunk_size * 2
+    level2_chunks = create_chunks_recursive(text, medium_chunk_size, medium_chunk_size // 4)
+    result['level_2'] = {
+        'chunks': level2_chunks,
+        'description': f'Medium subsections (~{medium_chunk_size} chars)',
+        'count': len(level2_chunks)
+    }
+    
+    # Level 3: Small chunks (paragraphs)
+    level3_chunks = create_chunks_recursive(text, chunk_size, chunk_size // 4)
+    result['level_3'] = {
+        'chunks': level3_chunks,
+        'description': f'Small paragraphs (~{chunk_size} chars)',
+        'count': len(level3_chunks)
+    }
+    
+    if levels > 3:
+        # Level 4: Sentence-based chunks
+        level4_chunks = create_chunks_sentence_based(text, sentences_per_chunk=2)
+        result['level_4'] = {
+            'chunks': level4_chunks,
+            'description': 'Sentence pairs',
+            'count': len(level4_chunks)
+        }
+    
+    return result
+
+
+# Default chunking function
+def create_chunks(text: str, chunk_size: int = 200, overlap_size: int = 50) -> list:
+    """Default chunking function (fixed-size)"""
+    return create_chunks_fixed_size(text, chunk_size, overlap_size)
 
 
 
@@ -137,19 +345,39 @@ def input_parsing(request: HttpRequest):
 
 
 def chunking(request: HttpRequest):
-    """Step 2: Text Chunking"""
+    """Step 2: Text Chunking with Multiple Strategies"""
     chunks = None
+    hierarchical_chunks = None
     original_length = 0
     total_chunks = 0
     chunk_size = 200
     overlap_size = 50
     input_method = "file"
+    chunking_method = "fixed_size"
     error = None
+    processing_time = 0
+    
+    # Parameters for different chunking methods
+    max_tokens = 100
+    overlap_tokens = 20
+    sentences_per_chunk = 3
+    overlap_sentences = 1
+    similarity_threshold = 0.7
+    min_chunk_size = 50
+    hierarchical_levels = 3
     
     if request.method == "POST":
         input_method = request.POST.get("input_method", "file")
+        chunking_method = request.POST.get("chunking_method", "fixed_size")
         chunk_size = int(request.POST.get("chunk_size", 200))
         overlap_size = int(request.POST.get("overlap_size", 50))
+        max_tokens = int(request.POST.get("max_tokens", 100))
+        overlap_tokens = int(request.POST.get("overlap_tokens", 20))
+        sentences_per_chunk = int(request.POST.get("sentences_per_chunk", 3))
+        overlap_sentences = int(request.POST.get("overlap_sentences", 1))
+        similarity_threshold = float(request.POST.get("similarity_threshold", 0.7))
+        min_chunk_size = int(request.POST.get("min_chunk_size", 50))
+        hierarchical_levels = int(request.POST.get("hierarchical_levels", 3))
         
         # Get text input
         raw_text = ""
@@ -164,18 +392,59 @@ def chunking(request: HttpRequest):
             raw_text = request.POST.get("text_input")
         
         if raw_text and not error:
-            cleaned_text = clean_text(raw_text)
-            original_length = len(cleaned_text)
-            chunks = create_chunks(cleaned_text, chunk_size, overlap_size)
-            total_chunks = len(chunks)
+            import time
+            start_time = time.time()
+            
+            # Don't clean text for semantic and sentence-based chunking to preserve structure
+            if chunking_method in ['semantic', 'sentence_based', 'hierarchical']:
+                text_to_chunk = raw_text
+            else:
+                text_to_chunk = clean_text(raw_text)
+            
+            original_length = len(text_to_chunk)
+            
+            try:
+                # Apply the selected chunking method
+                if chunking_method == "fixed_size":
+                    chunks = create_chunks_fixed_size(text_to_chunk, chunk_size, overlap_size)
+                elif chunking_method == "token_based":
+                    chunks = create_chunks_token_based(text_to_chunk, max_tokens, overlap_tokens)
+                elif chunking_method == "recursive":
+                    chunks = create_chunks_recursive(text_to_chunk, chunk_size, overlap_size)
+                elif chunking_method == "sentence_based":
+                    chunks = create_chunks_sentence_based(text_to_chunk, sentences_per_chunk, overlap_sentences)
+                elif chunking_method == "semantic":
+                    chunks = create_chunks_semantic(text_to_chunk, similarity_threshold, min_chunk_size)
+                elif chunking_method == "hierarchical":
+                    hierarchical_chunks = create_chunks_hierarchical(text_to_chunk, chunk_size, hierarchical_levels)
+                    chunks = hierarchical_chunks['level_3']['chunks']  # Default to level 3 for display
+                else:
+                    chunks = create_chunks_fixed_size(text_to_chunk, chunk_size, overlap_size)
+                
+                total_chunks = len(chunks) if chunks else 0
+                processing_time = round((time.time() - start_time) * 1000, 2)  # Convert to milliseconds
+                
+            except Exception as e:
+                error = f"Error in {chunking_method} chunking: {str(e)}"
+                print(f"Chunking error: {e}")
     
     context = {
         "chunks": chunks,
+        "hierarchical_chunks": hierarchical_chunks,
         "original_length": original_length,
         "total_chunks": total_chunks,
         "chunk_size": chunk_size,
         "overlap_size": overlap_size,
         "input_method": input_method,
+        "chunking_method": chunking_method,
+        "max_tokens": max_tokens,
+        "overlap_tokens": overlap_tokens,
+        "sentences_per_chunk": sentences_per_chunk,
+        "overlap_sentences": overlap_sentences,
+        "similarity_threshold": similarity_threshold,
+        "min_chunk_size": min_chunk_size,
+        "hierarchical_levels": hierarchical_levels,
+        "processing_time": processing_time,
         "error": error,
     }
     return render(request, "ragAPP/chunking.html", context)
@@ -197,10 +466,9 @@ def vector_embedding(request: HttpRequest):
         chunks = []
         
         if request.FILES.get("file"):
-            # Use unified parsing function
             parsed_text, file_type = parse_document(request.FILES["file"])
             if parsed_text is None:
-                error = file_type  # Contains error message
+                error = file_type
             else:
                 cleaned_text = clean_text(parsed_text)
                 chunks = create_chunks(cleaned_text)
@@ -209,27 +477,15 @@ def vector_embedding(request: HttpRequest):
             raw_text = request.POST.get("text_input")
             cleaned_text = clean_text(raw_text)
             chunks = create_chunks(cleaned_text)
-                    
-        elif request.POST.get("lines_input"):
-            lines_text = request.POST.get("lines_input")
-            lines = lines_text.split('\n')
-            for line in lines:
-                cleaned_line = clean_text(line)
-                if cleaned_line.strip():
-                    chunks.append(cleaned_line.strip())
         
         if chunks and not error:
             try:
-                print(f"🚀 Starting embedding process for {len(chunks)} chunks...")
-                
                 model = TextEmbedding(model_name=model_name)
-                print("✅ Model loaded successfully!")
-                
                 embeddings = []
                 total_chunks = len(chunks)
                 vectors = list(model.embed(chunks))
                 
-                for i, (chunk, vector) in enumerate(zip(chunks, vectors), 1):
+                for chunk, vector in zip(chunks, vectors):
                     vector_list = [round(float(x), 6) for x in vector]
                     embeddings.append({
                         'text': chunk,
@@ -239,7 +495,6 @@ def vector_embedding(request: HttpRequest):
                 if embeddings:
                     vector_dimensions = len(embeddings[0]['vector'])
                 
-                print(f"🎉 All {total_chunks} chunks processed successfully!")
             except Exception as e:
                 error = f"Error generating embeddings: {str(e)}"
     
@@ -255,14 +510,9 @@ def vector_embedding(request: HttpRequest):
 
 
 def vector_storage(request: HttpRequest):
-    """Step 4: Vector Storage - Complete Pipeline Demo"""
-    from fastembed import TextEmbedding
+    """Step 4: Vector Storage using ChromaDB"""
+    vector_db = get_vector_db()
     
-    # Initialize session storage for vectors if not exists
-    if 'vector_storage' not in request.session:
-        request.session['vector_storage'] = []
-    
-    stored_vectors = request.session['vector_storage']
     message = None
     error = None
     input_method = "file"
@@ -273,16 +523,20 @@ def vector_storage(request: HttpRequest):
         if action == "process_text":
             input_method = request.POST.get("input_method", "file")
             raw_text = ""
+            document_title = "Unknown Document"
             
             # Use unified parsing
             if request.FILES.get("file"):
-                parsed_text, file_type = parse_document(request.FILES["file"])
+                uploaded_file = request.FILES["file"]
+                document_title = uploaded_file.name
+                parsed_text, file_type = parse_document(uploaded_file)
                 if parsed_text is None:
                     error = f"❌ {file_type}"  # file_type contains error message
                 else:
                     raw_text = parsed_text
             elif request.POST.get("text_input"):
                 raw_text = request.POST.get("text_input")
+                document_title = "Manual Text Input"
             else:
                 error = "❌ Please provide either a file or text input"
             
@@ -292,43 +546,37 @@ def vector_storage(request: HttpRequest):
                 
                 if chunks:
                     try:
-                        print(f"🚀 Processing {len(chunks)} chunks for vector storage...")
+                        print(f"🚀 Processing {len(chunks)} chunks for ChromaDB storage...")
                         
-                        model = TextEmbedding(model_name="BAAI/bge-small-en")
-                        print("✅ FastEmbed model loaded successfully!")
+                        # Add chunks to ChromaDB
+                        chunk_ids = vector_db.add_document_chunks(document_title, chunks)
                         
-                        vectors = list(model.embed(chunks))
-                        print(f"✅ Generated {len(vectors)} embedding vectors")
-                        
-                        for i, (chunk, vector) in enumerate(zip(chunks, vectors)):
-                            vector_list = [round(float(x), 6) for x in vector]
-                            vector_id = len(stored_vectors) + 1
-                            
-                            stored_vectors.append({
-                                'id': vector_id,
-                                'text': chunk,
-                                'embedding': vector_list,
-                                'dimensions': len(vector_list)
-                            })
-                        
-                        request.session['vector_storage'] = stored_vectors
-                        request.session.modified = True
-                        
-                        message = f"✅ Successfully processed and stored {len(chunks)} text chunks with FastEmbed embeddings ({len(vectors[0])}D each)"
+                        message = f"✅ Successfully processed and stored {len(chunks)} text chunks in ChromaDB (384D embeddings)"
+                        print(f"✅ Added {len(chunk_ids)} chunks to ChromaDB")
                         
                     except Exception as e:
-                        error = f"❌ Error generating embeddings: {str(e)}"
+                        error = f"❌ Error storing in ChromaDB: {str(e)}"
+                        print(f"❌ ChromaDB Error: {str(e)}")
                 else:
                     error = "❌ No valid chunks were generated from the input text"
                     
         elif action == "clear_all":
-            request.session['vector_storage'] = []
-            stored_vectors = []
-            message = "✅ All vectors cleared from storage"
+            try:
+                vector_db.clear_all()
+                message = "✅ All vectors cleared from ChromaDB storage"
+            except Exception as e:
+                error = f"❌ Error clearing ChromaDB: {str(e)}"
+    
+    # Get all stored documents from ChromaDB
+    all_docs = vector_db.get_all_documents()
+    stats = vector_db.get_collection_stats()
     
     context = {
-        "stored_vectors": stored_vectors,
-        "total_vectors": len(stored_vectors),
+        "stored_vectors": all_docs['documents'],
+        "documents_by_title": all_docs['documents_by_title'],
+        "total_vectors": all_docs['total_count'],
+        "total_documents": all_docs['total_documents'],
+        "collection_stats": stats,
         "message": message,
         "error": error,
         "input_method": input_method,
@@ -337,111 +585,99 @@ def vector_storage(request: HttpRequest):
 
 
 def retrieval(request: HttpRequest):
-    """Step 5: Retrieval - Query Processing and Similarity Search Demo"""
-    # Get stored vectors from session
-    stored_vectors = request.session.get('vector_storage', [])
+    """Step 5: Retrieval - Query Processing and Similarity Search Demo using ChromaDB"""
+    vector_db = get_vector_db()
     demo_query = "What is RAG?"
     
-    # Use unified similarity search
-    retrieved_chunks = similarity_search(demo_query, stored_vectors)
+    # Get collection stats
+    stats = vector_db.get_collection_stats()
     
-    # Get query embedding for display
+    # Query ChromaDB for similar documents
+    retrieved_chunks = []
     query_embedding = []
-    if stored_vectors:
+    
+    if stats['total_documents'] > 0:
         try:
+            # Get query results from ChromaDB
+            results = vector_db.query_similar(demo_query, n_results=3)
+            retrieved_chunks = results['results']
+            
+            # Get query embedding for display
             from fastembed import TextEmbedding
             model = TextEmbedding(model_name="BAAI/bge-small-en")
             query_vectors = list(model.embed([demo_query]))
             query_embedding = [round(float(x), 6) for x in query_vectors[0]]
         except Exception as e:
-            print(f"Error generating query embedding: {str(e)}")
+            print(f"Error in retrieval demo: {str(e)}")
     
     context = {
         "demo_query": demo_query,
         "query_embedding": query_embedding[:10] if query_embedding else [],
         "full_query_embedding": query_embedding or [],
-        "total_stored_vectors": len(stored_vectors),
+        "total_stored_vectors": stats['total_documents'],
         "retrieved_chunks": retrieved_chunks,
-        "has_stored_vectors": len(stored_vectors) > 0,
+        "has_stored_vectors": stats['total_documents'] > 0,
+        "collection_stats": stats,
     }
     return render(request, "ragAPP/retrieval.html", context)
 
 
 def augmentation(request: HttpRequest):
-    """Step 6: Augmentation - Prompt Construction Demo"""
-    # Get stored vectors from session
-    stored_vectors = request.session.get('vector_storage', [])
+    """Step 6: Augmentation - Prompt Construction Demo using ChromaDB"""
+    vector_db = get_vector_db()
     demo_query = "What is RAG?"
     
-    # Use unified similarity search
-    retrieved_chunks = similarity_search(demo_query, stored_vectors)
+    # Get collection stats
+    stats = vector_db.get_collection_stats()
+    
+    # Query ChromaDB for similar documents
+    retrieved_chunks = []
+    if stats['total_documents'] > 0:
+        try:
+            results = vector_db.query_similar(demo_query, n_results=3)
+            retrieved_chunks = results['results']
+        except Exception as e:
+            print(f"Error in augmentation demo: {str(e)}")
     
     # Create augmented prompt
     augmented_prompt = f"""User Question: {demo_query}
-                        Context:
-                        """
+
+Context:
+"""
     
     for i, chunk in enumerate(retrieved_chunks, 1):
         augmented_prompt += f"{i}. {chunk['text']}\n"
     
-    augmented_prompt += f"""Please answer the user's question using the provided context. If the context doesn't contain relevant information, say so clearly."""
+    augmented_prompt += f"""\nPlease answer the user's question using the provided context. If the context doesn't contain relevant information, say so clearly."""
     
     context = {
         "demo_query": demo_query,
         "retrieved_chunks": retrieved_chunks,
         "augmented_prompt": augmented_prompt,
-        "total_stored_vectors": len(stored_vectors),
-        "has_stored_vectors": len(stored_vectors) > 0,
+        "total_stored_vectors": stats['total_documents'],
+        "has_stored_vectors": stats['total_documents'] > 0,
+        "collection_stats": stats,
     }
     return render(request, "ragAPP/augmentation.html", context)
 
 
-def similarity_search(query, stored_vectors, top_k=3):
-    """Unified similarity search function"""
-    if not stored_vectors:
-        return []
-    
-    try:
-        from fastembed import TextEmbedding
-        model = TextEmbedding(model_name="BAAI/bge-small-en")
-        query_vectors = list(model.embed([query]))
-        query_embedding = [round(float(x), 6) for x in query_vectors[0]]
-        
-        # Calculate similarities
-        similarities = []
-        for vector in stored_vectors:
-            query_vec = np.array(query_embedding)
-            stored_vec = np.array(vector['embedding'])
-            similarity = np.dot(query_vec, stored_vec) / (np.linalg.norm(query_vec) * np.linalg.norm(stored_vec))
-            similarities.append((vector, float(similarity)))
-        
-        # Sort by similarity and get top results
-        similarities.sort(key=lambda x: x[1], reverse=True)
-        top_results = similarities[:top_k]
-        
-        retrieved_chunks = []
-        for i, (vector, similarity) in enumerate(top_results):
-            retrieved_chunks.append({
-                'rank': i + 1,
-                'chunk_id': vector['id'],
-                'text': vector['text'],
-                'similarity_score': round(similarity, 3),
-                'embedding': vector['embedding'][:10]  # Show first 10 dimensions only
-            })
-        
-        return retrieved_chunks
-    except Exception as e:
-        print(f"Error in similarity search: {str(e)}")
-        return []
 
 def generation(request: HttpRequest):
-    """Step 7: Generation - LLM Response Generation Demo"""
-    # Get stored vectors from session
-    stored_vectors = request.session.get('vector_storage', [])
+    """Step 7: Generation - LLM Response Generation Demo using ChromaDB"""
+    vector_db = get_vector_db()
     demo_query = "What is RAG?"
     
-    # Use unified similarity search
-    retrieved_chunks = similarity_search(demo_query, stored_vectors)
+    # Get collection stats
+    stats = vector_db.get_collection_stats()
+    
+    # Query ChromaDB for similar documents
+    retrieved_chunks = []
+    if stats['total_documents'] > 0:
+        try:
+            results = vector_db.query_similar(demo_query, n_results=3)
+            retrieved_chunks = results['results']
+        except Exception as e:
+            print(f"Error in generation demo: {str(e)}")
     
     # Create augmented prompt
     augmented_prompt = f"""User Question: {demo_query}
@@ -456,88 +692,131 @@ Context:
 Please answer the user's question using the provided context. If the context doesn't contain relevant information, say so clearly."""
     
     # Generate response using the existing generate_response function
-    llm_response = generate_response(demo_query, "\n".join([chunk['text'] for chunk in retrieved_chunks]))
+    context_text = "\n".join([chunk['text'] for chunk in retrieved_chunks])
+    llm_response = generate_response(demo_query, context_text)
     
     context = {
         "demo_query": demo_query,
         "retrieved_chunks": retrieved_chunks,
         "augmented_prompt": augmented_prompt,
         "llm_response": llm_response,
-        "total_stored_vectors": len(stored_vectors),
-        "has_stored_vectors": len(stored_vectors) > 0,
+        "total_stored_vectors": stats['total_documents'],
+        "has_stored_vectors": stats['total_documents'] > 0,
+        "collection_stats": stats,
     }
     return render(request, "ragAPP/generation.html", context)
 
 
 def document_text_interface(request: HttpRequest):
-    """Card-based interface for document upload and text processing"""
-    return render(request, "ragAPP/document_text_interface.html")
+    """Enhanced document upload and text processing interface with ChromaDB integration"""
+    vector_db = get_vector_db()
+    
+    message = None
+    error = None
+    processing_result = None
+    
+    if request.method == "POST":
+        action = request.POST.get("action")
+        
+        if action == "upload_and_process":
+            title = request.POST.get("title", "")
+            uploaded_file = request.FILES.get("file")
+            
+            if not title:
+                error = "❌ Please provide a document title"
+            elif not uploaded_file:
+                error = "❌ Please select a file to upload"
+            else:
+                try:
+                    # Parse document
+                    cleaned_text, file_type = parse_document(uploaded_file)
+                    
+                    if cleaned_text is None:
+                        error = f"❌ {file_type}"
+                    else:
+                        # Create chunks
+                        cleaned_content = clean_text(cleaned_text)
+                        chunks = create_chunks(cleaned_content)
+                        
+                        if chunks:
+                            # Store in ChromaDB
+                            chunk_ids = vector_db.add_document_chunks(title, chunks)
+                            
+                            # Also store in Django models for compatibility
+                            document = Document.objects.create(
+                                title=title,
+                                file_type=file_type,
+                                content=cleaned_text,
+                                processed=True
+                            )
+                            
+                            processing_result = {
+                                'document_id': document.id,
+                                'title': title,
+                                'file_type': file_type,
+                                'content_length': len(cleaned_text),
+                                'total_chunks': len(chunks),
+                                'chunk_ids': chunk_ids[:5],  # Show first 5 IDs
+                                'embedding_dimensions': 384
+                            }
+                            
+                            message = f"✅ Document '{title}' processed and stored successfully!"
+                        else:
+                            error = "❌ No valid chunks were generated from the document"
+                            
+                except Exception as e:
+                    error = f"❌ Error processing document: {str(e)}"
+        
+    
+    # Get recent documents
+    recent_documents = Document.objects.all().order_by('-uploaded_at')[:5]
+    
+    context = {
+        "message": message,
+        "error": error,
+        "processing_result": processing_result,
+        "recent_documents": recent_documents,
+    }
+    return render(request, "ragAPP/document_text_interface.html", context)
 
 
 def knowledge_base(request: HttpRequest):
     """Knowledge Base - Document upload and management interface"""
-    print("\n" + "="*60)
-    print("📋 KNOWLEDGE BASE VIEW - Starting document management")
-    print("="*60)
-    
     documents = Document.objects.all().order_by('-uploaded_at')
-    print(f"📊 Found {documents.count()} existing documents in database")
-    
     message = None
     error = None
     
     if request.method == "POST":
         action = request.POST.get("action")
-        print(f"🎯 POST request received with action: {action}")
         
         if action == "upload_document":
-            print("\n📤 DOCUMENT UPLOAD PROCESS STARTED")
-            print("-" * 40)
-            
             title = request.POST.get("title", "")
             uploaded_file = request.FILES.get("file")
             
-            print(f"📝 Document title: '{title}'")
-            print(f"📁 File uploaded: {uploaded_file.name if uploaded_file else 'None'}")
-            
             if not title:
                 error = "❌ Please provide a document title"
-                print("❌ ERROR: No title provided")
             elif not uploaded_file:
                 error = "❌ Please select a file to upload"
-                print("❌ ERROR: No file uploaded")
             else:
-                # Use unified parsing function
                 cleaned_text, file_type = parse_document(uploaded_file)
                 
                 if cleaned_text is None:
-                    error = f"❌ {file_type}"  # file_type contains error message
-                    print(f"❌ ERROR: {file_type}")
+                    error = f"❌ {file_type}"
                 else:
-                    print(f"✅ File processed successfully - {len(cleaned_text)} characters")
-                    
-                    print(f"\n💾 CREATING DOCUMENT RECORD")
-                    # Create document
                     document = Document.objects.create(
                         title=title,
                         file_type=file_type,
                         content=cleaned_text
                     )
-                    print(f"✅ Document created with ID: {document.id}")
                     
-                    # Process document into chunks with embeddings
-                    print(f"\n🔄 PROCESSING DOCUMENT INTO CHUNKS")
                     try:
                         process_document_chunks(document)
                         document.processed = True
                         document.save()
-                        print(f"✅ Document processing completed successfully!")
                         message = f"✅ Document '{title}' uploaded and processed successfully!"
                     except Exception as e:
                         error = f"❌ Error processing document: {str(e)}"
-                        print(f"❌ PROCESSING ERROR: {str(e)}")
-                        document.delete()  # Clean up if processing failed
-                        print("🗑️ Document record deleted due to processing failure")
+                        document.delete()
         
         elif action == "delete_document":
             doc_id = request.POST.get("document_id")
@@ -557,45 +836,15 @@ def knowledge_base(request: HttpRequest):
 
 
 def process_document_chunks(document):
-    """Process document into chunks with embeddings using FastEmbed"""
-    print(f"\n🔧 CHUNK PROCESSING - Document: '{document.title}'")
-    print("-" * 50)
-    
-    from fastembed import TextEmbedding
-    
-    print("📦 Loading FastEmbed model: BAAI/bge-small-en")
-    model = TextEmbedding(model_name="BAAI/bge-small-en")
-    print("✅ FastEmbed model loaded successfully")
-    
-    # Use unified chunking function
+    """Process document into chunks with embeddings and store in ChromaDB"""
+    vector_db = get_vector_db()
     cleaned_text = clean_text(document.content)
-    print(f"📏 Cleaned text length: {len(cleaned_text)} characters")
-    
-    print("\n✂️ CREATING TEXT CHUNKS")
     chunks = create_chunks(cleaned_text)
-    print(f"✅ Created {len(chunks)} text chunks")
     
-    # Generate embeddings for all chunks
     if chunks:
-        print(f"\n🧠 GENERATING EMBEDDINGS for {len(chunks)} chunks")
-        vectors = list(model.embed(chunks))
-        print(f"✅ Generated {len(vectors)} embedding vectors")
-        
-        print(f"\n💾 SAVING CHUNKS TO DATABASE")
-        # Save chunks with embeddings
-        for i, (chunk_text, vector) in enumerate(zip(chunks, vectors)):
-            vector_list = [float(x) for x in vector]
-            chunk_obj = TextChunk.objects.create(
-                document=document,
-                text=chunk_text,
-                chunk_index=i,
-                embedding=vector_list
-            )
-            print(f"  ✅ Saved chunk {i+1}/{len(chunks)} - ID: {chunk_obj.id}, Embedding dims: {len(vector_list)}")
-        
-        print(f"🎉 CHUNK PROCESSING COMPLETE - {len(chunks)} chunks saved with embeddings")
-    else:
-        print("⚠️ No chunks created - document may be too short or empty")
+        chunk_ids = vector_db.add_document_chunks(document.title, chunks)
+        return len(chunk_ids)
+    return 0
 
 
 def chat_interface(request: HttpRequest):
@@ -613,14 +862,15 @@ def chat_interface(request: HttpRequest):
     # Get chat history
     messages = chat_session.messages.all()
     
-    # Get available documents
+    # Get available documents and ChromaDB stats
     documents = Document.objects.filter(processed=True)
-    total_chunks = TextChunk.objects.count()
+    vector_db = get_vector_db()
+    stats = vector_db.get_collection_stats()
     
     context = {
         "messages": messages,
         "documents": documents,
-        "total_chunks": total_chunks,
+        "total_chunks": stats['total_documents'],
         "session_id": session_id,
     }
     return render(request, "ragAPP/chat_interface.html", context)
@@ -671,68 +921,38 @@ def chat_query(request: HttpRequest):
 
 
 def perform_rag_query(query):
-    """Perform RAG query using database chunks and FastEmbed for similarity search"""
-    print(f"\n" + "="*60)
-    print(f"🔍 RAG QUERY PROCESSING - Query: '{query}'")
-    print("="*60)
+    """Perform RAG query using ChromaDB for similarity search"""
+    vector_db = get_vector_db()
+    stats = vector_db.get_collection_stats()
     
-    # Get all chunks with embeddings from database
-    chunks = TextChunk.objects.all()
-    print(f"📄 Total chunks in database: {chunks.count()}")
-    
-    if not chunks.exists():
-        print("⚠️ No chunks found in knowledge base")
+    if stats['total_documents'] == 0:
         return "I don't have any documents in my knowledge base yet. Please upload some documents first.", []
     
-    # Convert database chunks to format expected by similarity_search
-    stored_vectors = []
-    for chunk in chunks:
-        stored_vectors.append({
-            'id': chunk.id,
-            'text': chunk.text,
-            'embedding': chunk.embedding
-        })
-    
-    # Use unified similarity search function
-    print(f"🔄 Performing similarity search...")
-    retrieved_chunks = similarity_search(query, stored_vectors)
-    
-    # Prepare context for response
-    context_text = ""
-    db_retrieved_chunks = []
-    
-    print(f"\n📝 PREPARING CONTEXT FOR RESPONSE")
-    for i, chunk_data in enumerate(retrieved_chunks, 1):
-        chunk = TextChunk.objects.get(id=chunk_data['chunk_id'])
-        context_text += f"{i}. {chunk.text}\n\n"
-        db_retrieved_chunks.append({
-            'id': chunk.id,
-            'text': chunk.text,
-            'similarity': chunk_data['similarity_score'],
-            'document_title': chunk.document.title
-        })
-    
-    print(f"✅ Context prepared - {len(db_retrieved_chunks)} chunks")
-    
-    # Generate response using the retrieved context
-    print(f"\n🤖 GENERATING RESPONSE")
-    response = generate_response(query, context_text)
-    print(f"✅ Response generated")
-    
-    print(f"\n🎉 RAG QUERY COMPLETE")
-    print("="*60)
-    
-    return response, db_retrieved_chunks
+    try:
+        results = vector_db.query_similar(query, n_results=5)
+        context_text = ""
+        db_retrieved_chunks = []
+        
+        for i, result in enumerate(results['results'], 1):
+            context_text += f"{i}. {result['text']}\n\n"
+            db_retrieved_chunks.append({
+                'id': result['id'],
+                'text': result['text'],
+                'similarity': result['similarity_score'],
+                'document_title': result['metadata'].get('document_title', 'Unknown'),
+                'rank': result['rank']
+            })
+        
+        response = generate_response(query, context_text)
+        return response, db_retrieved_chunks
+        
+    except Exception as e:
+        return f"Sorry, I encountered an error while searching the knowledge base: {str(e)}", []
 
 
 def generate_response(query, context):
     """Generate response using Google Gemini API based on query and retrieved context"""
-    print(f"\n💬 RESPONSE GENERATION WITH GEMINI API")
-    print(f"📝 Query: '{query}'")
-    print(f"📄 Context length: {len(context)} characters")
-    
     if not context.strip():
-        print("⚠️ No context available - returning default message")
         return "I couldn't find relevant information in the knowledge base to answer your question."
     
     try:
@@ -740,66 +960,46 @@ def generate_response(query, context):
         import os
         from dotenv import load_dotenv
         
-        # Load environment variables
         load_dotenv()
-        
-        # Configure Gemini API
         api_key = os.getenv('GOOGLE_API_KEY')
         if not api_key:
-            print("⚠️ Google API key not found - falling back to template response")
             return generate_template_response(query, context)
         
         genai.configure(api_key=api_key)
-        print("✅ Gemini API configured successfully")
-        
-        # Use Gemini 1.5 Flash (free model)
         model = genai.GenerativeModel('gemini-1.5-flash')
-        print("📦 Using Gemini 1.5 Flash model")
         
-        # Create prompt for the LLM
         prompt = f"""You are a helpful AI assistant that answers questions based on provided context from documents.
 
-                Context from retrieved documents:
-                {context.strip()}
+Context from retrieved documents:
+{context.strip()}
 
-                User Question: {query}
+User Question: {query}
 
-                Instructions:
-                - If user greets you, respond with a friendly greeting
-                - Answer the user's question using ONLY the information provided in the context above
-                - Be concise and accurate
-                - If the context doesn't contain enough information to fully answer the question, say so clearly
-                - Don't make up information that's not in the context
-                - Structure your response in a clear, readable format
-                - If no context is provided, respond with a message that "Sorry, I don't have enough data to answer your question"
+Instructions:
+- Answer the user's question using ONLY the information provided in the context above
+- Be concise and accurate
+- If the context doesn't contain enough information to fully answer the question, say so clearly
+- Don't make up information that's not in the context
+- Structure your response in a clear, readable format
 
-                Answer:"""
+Answer:"""
         
-        print("🤖 Sending request to Gemini API...")
         response = model.generate_content(prompt)
         
         if response and response.text:
-            print(f"✅ Gemini response received - {len(response.text)} characters")
             return response.text.strip()
         else:
-            print("⚠️ Empty response from Gemini - falling back to template")
             return generate_template_response(query, context)
             
     except Exception as e:
-        print(f"❌ Error with Gemini API: {str(e)}")
-        print("🔄 Falling back to template response")
         return generate_template_response(query, context)
 
 
 def generate_template_response(query, context):
     """Fallback template-based response generation"""
-    print("📝 Generating template-based response as fallback")
-    response = f"""Based on the information in my knowledge base, here's what I found regarding your question: "{query}"
+    return f"""Based on the information in my knowledge base, here's what I found regarding your question: "{query}"
 
-        {context.strip()}
+{context.strip()}
 
-        This information was retrieved from the most relevant sections of the uploaded documents. If you need more specific details or have follow-up questions, please feel free to ask!"""
-    
-    print(f"✅ Template response generated - {len(response)} characters")
-    return response
+This information was retrieved from the most relevant sections of the uploaded documents. If you need more specific details or have follow-up questions, please feel free to ask!"""
 

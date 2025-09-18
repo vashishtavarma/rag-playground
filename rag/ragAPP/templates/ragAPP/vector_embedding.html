@@ -13,15 +13,16 @@
 <div class="row mb-4">
   <div class="col-12">
     <div class="card step-card shadow-sm">
-      <div class="card-header">
-        <h4 class="mb-0" style="color: white;">
-          <i class="bi bi-vector-pen"></i> RAG Demo – Step 3: Vector Embedding
+      <div class="card-header bg-primary text-white">
+        <h4 class="mb-0">
+          <i class="bi bi-diagram-3"></i> RAG Demo – Step 3: Vector Embedding
         </h4>
-        <small style="color: rgba(255, 255, 255, 0.8);">Convert text chunks to vectors</small>
+        <small class="text-white">Convert text chunks to vectors</small>
       </div>
       <div class="card-body">
         <!-- Input Form -->
-        <form method="post" enctype="multipart/form-data" class="mb-4">
+        <div class="bg-light rounded p-4 mb-4">
+        <form method="post" enctype="multipart/form-data">
           {% csrf_token %}
           <input type="hidden" name="input_method" id="inputMethodHidden" value="{{ request.POST.input_method|default:'file' }}">
           
@@ -32,7 +33,6 @@
               <select class="form-select" id="inputMethod" onchange="toggleInputMethod()">
                 <option value="file" {% if request.POST.input_method == 'file' or not request.POST %}selected{% endif %}>Upload File</option>
                 <option value="text" {% if request.POST.input_method == 'text' %}selected{% endif %}>Paste Text</option>
-                <option value="lines" {% if request.POST.input_method == 'lines' %}selected{% endif %}>Multi-Line Input</option>
               </select>
             </div>
           </div>
@@ -57,15 +57,6 @@
             </div>
           </div>
 
-          <!-- Lines Input -->
-          <div class="row mb-3" id="linesInputSection">
-            <div class="col-12">
-              <label for="linesInput" class="form-label">
-                <i class="bi bi-list-ol"></i> Enter Text (Each line becomes a chunk)
-              </label>
-              <textarea class="form-control" id="linesInput" name="lines_input" rows="8" placeholder="Line 1: First chunk of text&#10;Line 2: Second chunk of text&#10;Line 3: Third chunk of text">{{ request.POST.lines_input|default:"" }}</textarea>
-            </div>
-          </div>
 
           <!-- Embedding Model Info -->
           <div class="row mb-4">
@@ -76,15 +67,16 @@
             </div>
           </div>
 
-          <!-- Submit Button -->
+          <!-- Generate Button -->
           <div class="row">
             <div class="col-12">
-              <button class="btn btn-primary w-100" type="submit">
+              <button type="submit" class="btn btn-primary btn-lg w-100">
                 <i class="bi bi-play-circle"></i> Generate Vector Embeddings
               </button>
             </div>
           </div>
         </form>
+        </div>
 
         {% if embeddings %}
         <!-- Results Section -->
@@ -160,7 +152,7 @@
         <!-- Instructions -->
         <div class="alert alert-primary">
           <i class="bi bi-info-circle"></i>
-          <strong>Instructions:</strong> Upload a file, paste text, or enter multiple lines to convert text chunks into numerical vector representations.
+          <strong>Instructions:</strong> Upload a file or paste text to convert text chunks into numerical vector representations.
         </div>
         {% endif %}
       </div>
@@ -187,24 +179,17 @@ function toggleInputMethod() {
   const inputMethod = document.getElementById('inputMethod').value;
   const fileSection = document.getElementById('fileInputSection');
   const textSection = document.getElementById('textInputSection');
-  const linesSection = document.getElementById('linesInputSection');
   const hiddenInput = document.getElementById('inputMethodHidden');
 
   // Update hidden input
   hiddenInput.value = inputMethod;
 
-  // Hide all sections first
-  fileSection.style.display = 'none';
-  textSection.style.display = 'none';
-  linesSection.style.display = 'none';
-
-  // Show the selected section
   if (inputMethod === 'file') {
     fileSection.style.display = 'block';
+    textSection.style.display = 'none';
   } else if (inputMethod === 'text') {
+    fileSection.style.display = 'none';
     textSection.style.display = 'block';
-  } else if (inputMethod === 'lines') {
-    linesSection.style.display = 'block';
   }
 }
 

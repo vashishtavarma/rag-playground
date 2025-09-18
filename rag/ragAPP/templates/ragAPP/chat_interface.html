@@ -172,16 +172,6 @@
           <div class="message message-bot">
             <div class="message-bubble">
               {{ message.response|linebreaks }}
-              {% if message.retrieved_chunks %}
-              <div class="retrieved-chunks">
-                <small><strong>📚 Sources:</strong></small>
-                {% for chunk_id in message.retrieved_chunks %}
-                <div class="chunk-item">
-                  <small>Chunk ID: {{ chunk_id }}</small>
-                </div>
-                {% endfor %}
-              </div>
-              {% endif %}
             </div>
             <div class="message-time">{{ message.timestamp|date:"H:i" }}</div>
           </div>
@@ -281,25 +271,10 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         
         let chunksHtml = '';
-        if (chunks && chunks.length > 0) {
-            chunksHtml = '<div class="retrieved-chunks"><small><strong>📚 Sources:</strong></small>';
-            chunks.forEach(chunk => {
-                chunksHtml += `
-                    <div class="chunk-item">
-                        <small><strong>${chunk.document_title}</strong> (Similarity: <span class="chunk-similarity">${(chunk.similarity * 100).toFixed(1)}%</span>)</small>
-                        <div style="font-size: 0.8rem; color: #6c757d; margin-top: 3px;">
-                            ${chunk.text.substring(0, 100)}${chunk.text.length > 100 ? '...' : ''}
-                        </div>
-                    </div>
-                `;
-            });
-            chunksHtml += '</div>';
-        }
         
         messageDiv.innerHTML = `
             <div class="message-bubble">
                 ${isUser ? message : (response || message).replace(/\n/g, '<br>')}
-                ${chunksHtml}
             </div>
             <div class="message-time">${timeString}</div>
         `;

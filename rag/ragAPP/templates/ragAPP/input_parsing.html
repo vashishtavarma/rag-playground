@@ -9,78 +9,212 @@
 {% endblock %}
 
 {% block content %}
+      <!-- Why Parsing Section -->
+      <div class="row mb-4">
+        <div class="col-12">
+          <div class="card border-info shadow-sm">
+            <div class="card-header bg-info text-white">
+              <h5 class="mb-0">
+                <i class="bi bi-lightbulb"></i> Why Document Parsing is Essential in RAG
+              </h5>
+            </div>
+            <div class="card-body">
+              <div class="row">
+                <div class="col-md-8">
+                  <p class="mb-3">Document parsing is the critical first step in any RAG (Retrieval-Augmented Generation) pipeline. Here's why it matters:</p>
+                  
+                  <div class="row g-3">
+                    <div class="col-sm-6">
+                      <div class="d-flex align-items-start">
+                        <i class="bi bi-check-circle-fill text-success me-2 mt-1"></i>
+                        <div>
+                          <strong>Text Extraction:</strong> Converts binary formats (PDF) into readable text that AI models can process.
+                        </div>
+                      </div>
+                    </div>
+                    <div class="col-sm-6">
+                      <div class="d-flex align-items-start">
+                        <i class="bi bi-check-circle-fill text-success me-2 mt-1"></i>
+                        <div>
+                          <strong>Noise Removal:</strong> Eliminates formatting artifacts, extra spaces, and unwanted characters.
+                        </div>
+                      </div>
+                    </div>
+                    <div class="col-sm-6">
+                      <div class="d-flex align-items-start">
+                        <i class="bi bi-check-circle-fill text-success me-2 mt-1"></i>
+                        <div>
+                          <strong>Structure Preservation:</strong> Maintains meaningful text structure while fixing broken words and spacing.
+                        </div>
+                      </div>
+                    </div>
+                    <div class="col-sm-6">
+                      <div class="d-flex align-items-start">
+                        <i class="bi bi-check-circle-fill text-success me-2 mt-1"></i>
+                        <div>
+                          <strong>Quality Preparation:</strong> Ensures clean input for accurate chunking and embedding generation.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-md-4">
+                  <div class="bg-light rounded p-3 h-100 d-flex flex-column justify-content-center">
+                    <div class="text-center">
+                      <i class="bi bi-diagram-3 text-primary" style="font-size: 3rem;"></i>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Step Header -->
       <div class="row mb-4">
         <div class="col-12">
-          <div class="card step-card shadow-sm">
-            <div class="card-header">
-              <h4 class="mb-0 step-title">
-                <i class="bi bi-file-earmark-text"></i> Input Parsing
+          <div class="card step-card shadow-sm border-primary">
+            <div class="card-header bg-primary text-white">
+              <h4 class="mb-0">
+                <i class="bi bi-file-earmark-text"></i> Document Parsing & Text Extraction
               </h4>
-              <small>Upload & clean TXT/PDF files</small>
+              <small class="text-white">Transform your documents into clean, processable text</small>
             </div>
             <div class="card-body">
               <!-- Upload Form -->
-              <form method="post" enctype="multipart/form-data" class="mb-4">
-                {% csrf_token %}
-                <div class="row align-items-end">
-                  <div class="col-md-9">
-                    <label for="fileInput" class="form-label">
-                      <i class="bi bi-cloud-upload"></i> Select File
-                    </label>
-                    <input type="file" class="form-control" id="fileInput" name="file" accept=".txt, .pdf" required>
-                  </div>
-                  <div class="col-md-3">
-                    <button class="btn btn-primary w-100" type="submit">
-                      <i class="bi bi-play-circle"></i> Process File
-                    </button>
+              <div class="row mb-4">
+                <div class="col-12">
+                  <div class="bg-light rounded p-4">
+                    <form method="post" enctype="multipart/form-data">
+                      {% csrf_token %}
+                      <div class="row g-3">
+                        <div class="col-12">
+                          <label for="fileInput" class="form-label fw-semibold">
+                            <i class="bi bi-cloud-upload text-primary"></i> Select Document
+                          </label>
+                          <input type="file" class="form-control form-control-lg" id="fileInput" name="file" accept=".txt, .pdf" required>
+                          <div class="form-text">
+                            <i class="bi bi-info-circle"></i> Supported formats: TXT, PDF (up to 10MB)
+                          </div>
+                        </div>
+                        <div class="col-12">
+                          <button class="btn btn-primary btn-lg w-100" type="submit">
+                            <i class="bi bi-play-circle"></i> Parse Document
+                          </button>
+                        </div>
+                      </div>
+                    </form>
                   </div>
                 </div>
-              </form>
+              </div>
 
-              {% if raw_text is not None %}
+              {% if error %}
+              <!-- Error Display -->
+              <div class="alert alert-danger d-flex align-items-center" role="alert">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                <div>
+                  <strong>Processing Error:</strong> {{ error }}
+                </div>
+              </div>
+              {% elif raw_text is not None %}
+              <!-- Processing Success Banner -->
+              <div class="alert alert-success d-flex align-items-center mb-4" role="alert">
+                <i class="bi bi-check-circle-fill me-2"></i>
+                <div>
+                  <strong>Document Parsed Successfully!</strong> 
+                  Cleaned {{ char_reduction }} characters (removed formatting artifacts, fixed spacing, and normalized text structure).
+                </div>
+              </div>
+
               <!-- Results Section -->
               <div class="row g-4">
                 <div class="col-lg-6">
-                  <div class="card h-100 border-warning">
-                    <div class="card-header bg-warning text-dark">
-                      <i class="bi bi-file-text"></i> Raw Text
-                      <span class="badge bg-dark ms-2">{{ raw_text|length }} chars</span>
+                  <div class="card h-100 border-warning shadow-sm">
+                    <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+                      <div>
+                        <i class="bi bi-file-text"></i> <strong>Raw Extracted Text</strong>
+                      </div>
+                      <span class="badge bg-dark">{{ raw_text|length }} chars</span>
                     </div>
-                    <div class="card-body" style="max-height: 400px; overflow-y: auto;">
-                      <pre class="mb-0" style="white-space: pre-wrap; font-size: 0.9em;">{{ raw_text }}</pre>
+                    <div class="card-body p-0">
+                      <div class="bg-light p-2 border-bottom">
+                        <small class="text-muted">
+                          <i class="bi bi-info-circle"></i> Direct extraction from document (may contain formatting issues)
+                        </small>
+                      </div>
+                      <div style="max-height: 400px; overflow-y: auto; padding: 1rem;">
+                        <pre class="mb-0" style="white-space: pre-wrap; font-size: 0.85em; line-height: 1.4;">{{ raw_text }}</pre>
+                      </div>
                     </div>
                   </div>
                 </div>
                 <div class="col-lg-6">
-                  <div class="card h-100 border-success">
-                    <div class="card-header bg-success text-white">
-                      <i class="bi bi-check-circle"></i> Basic Cleaned Text
-                      <span class="badge bg-dark ms-2">{{ parsed_result|length }} chars</span>
+                  <div class="card h-100 border-success shadow-sm">
+                    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                      <div>
+                        <i class="bi bi-check-circle"></i> <strong>Parsed & Cleaned Text</strong>
+                      </div>
+                      <span class="badge bg-dark">{{ parsed_result|length }} chars</span>
                     </div>
-                    <div class="card-body" style="max-height: 400px; overflow-y: auto;">
-                      <pre class="mb-0" style="white-space: pre-wrap; font-size: 0.9em;">{{ parsed_result }}</pre>
+                    <div class="card-body p-0">
+                      <div class="bg-light p-2 border-bottom">
+                        <small class="text-muted">
+                          <i class="bi bi-check-circle"></i> Cleaned and optimized for RAG processing
+                        </small>
+                      </div>
+                      <div style="max-height: 400px; overflow-y: auto; padding: 1rem;">
+                        <pre class="mb-0" style="white-space: pre-wrap; font-size: 0.85em; line-height: 1.4;">{{ parsed_result }}</pre>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <!-- Processing Stats -->
+              <!-- Processing Statistics -->
               <div class="row mt-4">
                 <div class="col-12">
-                  <div class="alert alert-info">
-                    <i class="bi bi-info-circle"></i> 
-                    <strong>Processing Complete:</strong> 
-                    Cleaned {{ char_reduction }} characters (removed junk, fixed spacing).
+                  <div class="card border-info">
+                    <div class="card-header bg-info text-white">
+                      <i class="bi bi-graph-up"></i> <strong>Processing Statistics</strong>
+                    </div>
+                    <div class="card-body">
+                      <div class="row text-center">
+                        <div class="col-md-3">
+                          <div class="border rounded p-3 h-100">
+                            <i class="bi bi-file-earmark text-primary" style="font-size: 2rem;"></i>
+                            <h5 class="mt-2 mb-1">{{ raw_text|length }}</h5>
+                            <small class="text-muted">Original Characters</small>
+                          </div>
+                        </div>
+                        <div class="col-md-3">
+                          <div class="border rounded p-3 h-100">
+                            <i class="bi bi-arrow-right text-warning" style="font-size: 2rem;"></i>
+                            <h5 class="mt-2 mb-1">{{ char_reduction }}</h5>
+                            <small class="text-muted">Characters Removed</small>
+                          </div>
+                        </div>
+                        <div class="col-md-3">
+                          <div class="border rounded p-3 h-100">
+                            <i class="bi bi-check-circle text-success" style="font-size: 2rem;"></i>
+                            <h5 class="mt-2 mb-1">{{ parsed_result|length }}</h5>
+                            <small class="text-muted">Final Characters</small>
+                          </div>
+                        </div>
+                        <div class="col-md-3">
+                          <div class="border rounded p-3 h-100">
+                            <i class="bi bi-percent text-info" style="font-size: 2rem;"></i>
+                            <h5 class="mt-2 mb-1">{% widthratio char_reduction raw_text|length 100 %}%</h5>
+                            <small class="text-muted">Reduction Rate</small>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
+
               {% else %}
-              <!-- Instructions -->
-              <div class="alert alert-primary">
-                <i class="bi bi-info-circle"></i>
-                <strong>Upload</strong> a .txt or .pdf file to extract and clean text.
-              </div>
               {% endif %}
             </div>
           </div>
