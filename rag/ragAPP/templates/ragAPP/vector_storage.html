@@ -37,19 +37,35 @@
 
         <!-- Storage Statistics -->
         <div class="row mb-4">
-          <div class="col-md-6">
+          <div class="col-md-3">
             <div class="card border-0 bg-light">
               <div class="card-body text-center">
-                <h5 class="text-muted">Total Vectors Stored</h5>
+                <h5 class="text-muted">Total Documents</h5>
                 <h3 class="step-title">{{ total_vectors }}</h3>
               </div>
             </div>
           </div>
-          <div class="col-md-6">
+          <div class="col-md-3">
             <div class="card border-0 bg-light">
               <div class="card-body text-center">
-                <h5 class="text-muted">Pipeline Status</h5>
-                <h3 class="step-title">Complete Demo</h3>
+                <h5 class="text-muted">Vector Database</h5>
+                <h3 class="step-title">ChromaDB</h3>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card border-0 bg-light">
+              <div class="card-body text-center">
+                <h5 class="text-muted">Embedding Model</h5>
+                <h3 class="step-title">{{ collection_stats.embedding_model }}</h3>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card border-0 bg-light">
+              <div class="card-body text-center">
+                <h5 class="text-muted">Dimensions</h5>
+                <h3 class="step-title">{{ collection_stats.embedding_dimensions }}D</h3>
               </div>
             </div>
           </div>
@@ -100,8 +116,8 @@
             <div class="col-12">
               <div class="alert alert-info">
                 <i class="bi bi-info-circle"></i>
-                <strong>Pipeline Steps:</strong> 
-                1. Parse input → 2. Clean text → 3. Create chunks (200 chars, 50 overlap) → 4. Generate FastEmbed embeddings (384D) → 5. Store in vector DB
+                <strong>ChromaDB Pipeline:</strong> 
+                1. Parse input → 2. Clean text → 3. Create chunks (200 chars, 50 overlap) → 4. Generate FastEmbed embeddings (384D) → 5. Store in ChromaDB with metadata
               </div>
             </div>
           </div>
@@ -130,52 +146,111 @@
           </div>
         </div>
 
-        <!-- Stored Vectors Display -->
-        {% if stored_vectors %}
+        <!-- ChromaDB Collection Display -->
+        {% if documents_by_title %}
         <div class="row">
           <div class="col-12">
             <h5 class="step-title mb-3">
-              <i class="bi bi-collection"></i> Stored Vectors ({{ total_vectors }} total)
+              <i class="bi bi-database"></i> ChromaDB Collection: {{ collection_stats.collection_name }} 
+              <small class="text-muted">({{ total_documents }} documents, {{ total_vectors }} chunks)</small>
             </h5>
           </div>
         </div>
         
-        <div class="row g-3">
-          {% for vector in stored_vectors %}
+        {% for document_title, chunks in documents_by_title.items %}
+        <div class="row mb-4">
           <div class="col-12">
             <div class="card border-0 shadow-sm">
               <div class="card-header">
                 <h6 class="mb-0" style="color: white;">
-                  <i class="bi bi-vector-pen"></i> Vector ID: {{ vector.id }}
+                  <i class="bi bi-file-text"></i> Document: {{ document_title }}
                 </h6>
-                <small style="color: rgba(255, 255, 255, 0.8);">{{ vector.dimensions }} dimensions</small>
+                <small style="color: rgba(255, 255, 255, 0.8);">
+                  {{ chunks|length }} chunks | Total characters: {{ chunks|length|add:"0" }}
+                </small>
               </div>
               <div class="card-body">
-                <div class="row">
-                  <div class="col-md-2">
-                    <h6 class="text-muted mb-2">Vector ID:</h6>
-                    <p class="fw-bold">{{ vector.id }}</p>
-                  </div>
-                  <div class="col-md-2">
-                    <h6 class="text-muted mb-2">Dimensions:</h6>
-                    <p class="fw-bold">{{ vector.dimensions }}</p>
-                  </div>
-                  <div class="col-md-4">
-                    <h6 class="text-muted mb-2">Original Text:</h6>
-                    <p class="card-text" style="font-size: 0.9em; line-height: 1.4; max-height: 100px; overflow-y: auto;">{{ vector.text }}</p>
-                  </div>
-                  <div class="col-md-4">
-                    <h6 class="text-muted mb-2">Embedding Values:</h6>
-                    <div class="bg-light p-2 rounded" style="font-family: 'Courier New', monospace; font-size: 0.8em; max-height: 100px; overflow-y: auto;">
-                      [{{ vector.embedding|join:", " }}]
+                <!-- Chunks Summary -->
+                <div class="alert alert-light border">
+                  <div class="row text-center">
+                    <div class="col-md-3">
+                      <h5 class="mb-1">{{ chunks|length }}</h5>
+                      <small class="text-muted">Total Chunks</small>
+                    </div>
+                    <div class="col-md-3">
+                      <h5 class="mb-1">384D</h5>
+                      <small class="text-muted">Vector Dimensions</small>
+                    </div>
+                    <div class="col-md-3">
+                      <h5 class="mb-1">ChromaDB</h5>
+                      <small class="text-muted">Storage Backend</small>
+                    </div>
+                    <div class="col-md-3">
+                      <h5 class="mb-1">BAAI/bge-small-en</h5>
+                      <small class="text-muted">Embedding Model</small>
                     </div>
                   </div>
                 </div>
+                
+                <!-- Sample Chunks (First 3) -->
+                <div class="row g-3">
+                  {% for chunk in chunks|slice:":3" %}
+                  <div class="col-lg-4">
+                    <div class="card border-1 bg-light h-100">
+                      <div class="card-header py-2 bg-primary text-white">
+                        <small class="fw-bold">Chunk {{ chunk.chunk_index }}</small>
+                        <span class="badge bg-light text-dark ms-2">{{ chunk.text_length }} chars</span>
+                      </div>
+                      <div class="card-body py-2">
+                        <div class="border rounded p-2 mb-2" style="background-color: #f8f9fa; max-height: 100px; overflow-y: auto;">
+                          <p class="card-text mb-0" style="font-size: 0.8em; line-height: 1.3;">{{ chunk.text|truncatechars:150 }}</p>
+                        </div>
+                        <small class="text-muted d-block" style="font-size: 0.7em;">
+                          <strong>Vector ID:</strong> {{ chunk.id|truncatechars:20 }}...
+                        </small>
+                      </div>
+                    </div>
+                  </div>
+                  {% endfor %}
+                </div>
+                
+                {% if chunks|length > 3 %}
+                <div class="text-center mt-3">
+                  <button class="btn btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#allChunks{{ forloop.counter0 }}" aria-expanded="false">
+                    <i class="bi bi-eye"></i> View All {{ chunks|length }} Chunks
+                  </button>
+                </div>
+                
+                <div class="collapse mt-3" id="allChunks{{ forloop.counter0 }}">
+                  <div class="row g-2">
+                    {% for chunk in chunks|slice:"3:" %}
+                    <div class="col-md-6 col-lg-4">
+                      <div class="card border-1 bg-light h-100">
+                        <div class="card-header py-2">
+                          <small class="fw-bold">Chunk {{ chunk.chunk_index }}</small>
+                          <span class="badge bg-secondary ms-2">{{ chunk.text_length }} chars</span>
+                        </div>
+                        <div class="card-body py-2">
+                          <div class="border rounded p-2 mb-2" style="background-color: #f8f9fa; max-height: 80px; overflow-y: auto;">
+                            <p class="card-text mb-0" style="font-size: 0.75em; line-height: 1.3;">{{ chunk.text|truncatechars:100 }}</p>
+                          </div>
+                          <small class="text-muted" style="font-size: 0.65em;">
+                            <strong>ID:</strong> {{ chunk.id|truncatechars:15 }}...
+                          </small>
+                        </div>
+                      </div>
+                    </div>
+                    {% endfor %}
+                  </div>
+                </div>
+                {% endif %}
+                </div>
+                
               </div>
             </div>
           </div>
-          {% endfor %}
         </div>
+        {% endfor %}
         
         {% else %}
         <!-- Empty State -->

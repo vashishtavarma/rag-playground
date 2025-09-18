@@ -13,15 +13,16 @@
 <div class="row mb-4">
   <div class="col-12">
     <div class="card step-card shadow-sm">
-      <div class="card-header">
-        <h4 class="mb-0" style="color: white;">
-          <i class="bi bi-scissors"></i> RAG Demo – Step 2: Chunking
+      <div class="card-header bg-primary text-white">
+        <h4 class="mb-0">
+          <i class="bi bi-scissors"></i> RAG Demo – Step 2: Advanced Chunking
         </h4>
-        <small style="color: rgba(255, 255, 255, 0.8);">Split text into chunks with custom size & overlap</small>
+        <small class="text-white">Experiment with different chunking strategies: Fixed-size, Token-based, Recursive, Sentence-based, Semantic & Hierarchical</small>
       </div>
       <div class="card-body">
         <!-- Input Form -->
-        <form method="post" enctype="multipart/form-data" class="mb-4">
+        <div class="bg-light rounded p-4 mb-4">
+        <form method="post" enctype="multipart/form-data">
           {% csrf_token %}
           <input type="hidden" name="input_method" id="inputMethodHidden" value="{{ request.POST.input_method|default:'file' }}">
           
@@ -56,31 +57,127 @@
             </div>
           </div>
 
-          <!-- Chunking Parameters -->
-          <div class="row mb-4">
-            <div class="col-md-6">
-              <label for="chunkSize" class="form-label">
-                <i class="bi bi-scissors"></i> Chunk Size
+          <!-- Chunking Method Selection -->
+          <div class="row mb-3">
+            <div class="col-12">
+              <label for="chunkingMethod" class="form-label fw-bold">
+                <i class="bi bi-gear"></i> Chunking Strategy
               </label>
-              <input type="number" class="form-control" id="chunkSize" name="chunk_size" value="{{ chunk_size|default:200 }}" min="50" max="1000">
-            </div>
-            <div class="col-md-6">
-              <label for="overlapSize" class="form-label">
-                <i class="bi bi-arrow-left-right"></i> Overlap Size
-              </label>
-              <input type="number" class="form-control" id="overlapSize" name="overlap_size" value="{{ overlap_size|default:50 }}" min="0" max="200">
+              <select class="form-select" id="chunkingMethod" name="chunking_method" onchange="toggleChunkingParameters()">
+                <option value="fixed_size" {% if chunking_method == 'fixed_size' or not chunking_method %}selected{% endif %}>Fixed-size Chunking</option>
+                <option value="token_based" {% if chunking_method == 'token_based' %}selected{% endif %}>Token-based Chunking</option>
+                <option value="recursive" {% if chunking_method == 'recursive' %}selected{% endif %}>Recursive Chunking</option>
+                <option value="sentence_based" {% if chunking_method == 'sentence_based' %}selected{% endif %}>Sentence-based Chunking</option>
+                <option value="semantic" {% if chunking_method == 'semantic' %}selected{% endif %}>Semantic Chunking</option>
+                <option value="hierarchical" {% if chunking_method == 'hierarchical' %}selected{% endif %}>Hierarchical Chunking</option>
+              </select>
+              <div class="form-text">
+                <small id="methodDescription">Choose a chunking strategy to see its specific parameters below.</small>
+              </div>
             </div>
           </div>
 
-          <!-- Submit Button -->
+          <!-- Fixed-size & Recursive Parameters -->
+          <div class="chunking-params" id="fixedSizeParams">
+            <div class="row mb-3">
+              <div class="col-md-6">
+                <label for="chunkSize" class="form-label">
+                  <i class="bi bi-scissors"></i> Chunk Size (characters)
+                </label>
+                <input type="number" class="form-control" id="chunkSize" name="chunk_size" value="{{ chunk_size|default:200 }}" min="50" max="2000">
+              </div>
+              <div class="col-md-6">
+                <label for="overlapSize" class="form-label">
+                  <i class="bi bi-arrow-left-right"></i> Overlap Size (characters)
+                </label>
+                <input type="number" class="form-control" id="overlapSize" name="overlap_size" value="{{ overlap_size|default:50 }}" min="0" max="500">
+              </div>
+            </div>
+          </div>
+
+          <!-- Token-based Parameters -->
+          <div class="chunking-params" id="tokenParams" style="display: none;">
+            <div class="row mb-3">
+              <div class="col-md-6">
+                <label for="maxTokens" class="form-label">
+                  <i class="bi bi-hash"></i> Max Tokens (words)
+                </label>
+                <input type="number" class="form-control" id="maxTokens" name="max_tokens" value="{{ max_tokens|default:100 }}" min="10" max="500">
+              </div>
+              <div class="col-md-6">
+                <label for="overlapTokens" class="form-label">
+                  <i class="bi bi-arrow-left-right"></i> Overlap Tokens (words)
+                </label>
+                <input type="number" class="form-control" id="overlapTokens" name="overlap_tokens" value="{{ overlap_tokens|default:20 }}" min="0" max="100">
+              </div>
+            </div>
+          </div>
+
+          <!-- Sentence-based Parameters -->
+          <div class="chunking-params" id="sentenceParams" style="display: none;">
+            <div class="row mb-3">
+              <div class="col-md-6">
+                <label for="sentencesPerChunk" class="form-label">
+                  <i class="bi bi-list-ol"></i> Sentences per Chunk
+                </label>
+                <input type="number" class="form-control" id="sentencesPerChunk" name="sentences_per_chunk" value="{{ sentences_per_chunk|default:3 }}" min="1" max="10">
+              </div>
+              <div class="col-md-6">
+                <label for="overlapSentences" class="form-label">
+                  <i class="bi bi-arrow-left-right"></i> Overlap Sentences
+                </label>
+                <input type="number" class="form-control" id="overlapSentences" name="overlap_sentences" value="{{ overlap_sentences|default:1 }}" min="0" max="5">
+              </div>
+            </div>
+          </div>
+
+          <!-- Semantic Parameters -->
+          <div class="chunking-params" id="semanticParams" style="display: none;">
+            <div class="row mb-3">
+              <div class="col-md-6">
+                <label for="similarityThreshold" class="form-label">
+                  <i class="bi bi-diagram-3"></i> Similarity Threshold
+                </label>
+                <input type="number" class="form-control" id="similarityThreshold" name="similarity_threshold" value="{{ similarity_threshold|default:0.7 }}" min="0.1" max="1.0" step="0.1">
+                <div class="form-text"><small>Lower values = more breakpoints</small></div>
+              </div>
+              <div class="col-md-6">
+                <label for="minChunkSize" class="form-label">
+                  <i class="bi bi-rulers"></i> Min Chunk Size
+                </label>
+                <input type="number" class="form-control" id="minChunkSize" name="min_chunk_size" value="{{ min_chunk_size|default:50 }}" min="10" max="200">
+              </div>
+            </div>
+          </div>
+
+          <!-- Hierarchical Parameters -->
+          <div class="chunking-params" id="hierarchicalParams" style="display: none;">
+            <div class="row mb-3">
+              <div class="col-md-6">
+                <label for="hierarchicalLevels" class="form-label">
+                  <i class="bi bi-diagram-2"></i> Hierarchy Levels
+                </label>
+                <input type="number" class="form-control" id="hierarchicalLevels" name="hierarchical_levels" value="{{ hierarchical_levels|default:3 }}" min="2" max="4">
+              </div>
+              <div class="col-md-6">
+                <label for="baseChunkSize" class="form-label">
+                  <i class="bi bi-scissors"></i> Base Chunk Size
+                </label>
+                <input type="number" class="form-control" id="baseChunkSize" name="chunk_size" value="{{ chunk_size|default:200 }}" min="50" max="1000">
+              </div>
+            </div>
+          </div>
+
+          <!-- Generate Button -->
           <div class="row">
             <div class="col-12">
-                <button class="btn btn-primary w-100" type="submit">
-                <i class="bi bi-play-circle"></i> Create Chunks
-                </button>
+              <button type="submit" class="btn btn-primary btn-lg w-100">
+                <i class="bi bi-play-circle"></i> Generate Chunks
+              </button>
             </div>
           </div>
         </form>
+        </div>
 
         {% if chunks %}
         <!-- Results Section -->
@@ -88,7 +185,7 @@
         
         <!-- Statistics -->
         <div class="row mb-4">
-          <div class="col-md-4">
+          <div class="col-md-3">
             <div class="card border-0 bg-light">
               <div class="card-body text-center">
                 <h5 class="text-muted">Original Text Length</h5>
@@ -96,7 +193,7 @@
               </div>
             </div>
           </div>
-          <div class="col-md-4">
+          <div class="col-md-3">
             <div class="card border-0 bg-light">
               <div class="card-body text-center">
                 <h5 class="text-muted">Total Chunks Created</h5>
@@ -104,28 +201,80 @@
               </div>
             </div>
           </div>
-          <div class="col-md-4">
+          <div class="col-md-3">
             <div class="card border-0 bg-light">
               <div class="card-body text-center">
-                <h5 class="text-muted">Chunk Size / Overlap</h5>
-                <h3 class="step-title">{{ chunk_size }} / {{ overlap_size }}</h3>
+                <h5 class="text-muted">Chunking Method</h5>
+                <h3 class="step-title">{{ chunking_method|title|default:"Fixed Size" }}</h3>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card border-0 bg-light">
+              <div class="card-body text-center">
+                <h5 class="text-muted">Processing Time</h5>
+                <h3 class="step-title">{{ processing_time|default:0 }}ms</h3>
               </div>
             </div>
           </div>
         </div>
+
+        {% if hierarchical_chunks %}
+        <!-- Hierarchical Chunks Display -->
+        <div class="row mb-4">
+          <div class="col-12">
+            <h5 class="step-title mb-3">
+              <i class="bi bi-diagram-2"></i> Hierarchical Chunks Overview
+            </h5>
+            <div class="row g-3">
+              {% for level_key, level_data in hierarchical_chunks.items %}
+              <div class="col-md-6 col-lg-3">
+                <div class="card border-0 bg-info text-white">
+                  <div class="card-body text-center">
+                    <h6 class="mb-1">{{ level_key|title }}</h6>
+                    <h4>{{ level_data.count }} chunks</h4>
+                    <small>{{ level_data.description }}</small>
+                  </div>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        {% endif %}
 
         <!-- Chunks Display -->
         <div class="row">
           <div class="col-12">
             <h5 class="step-title mb-3">
               <i class="bi bi-collection"></i> Generated Chunks
+              {% if hierarchical_chunks %}
+              <span class="badge bg-info ms-2">Showing Level 3 (Small Paragraphs)</span>
+              {% endif %}
             </h5>
           </div>
         </div>
         
-        <div class="row g-3">
-          {% for chunk in chunks %}
-          <div class="col-lg-6 col-xl-4">
+        {% if hierarchical_chunks %}
+        <!-- Hierarchical Level Selector -->
+        <div class="row mb-3">
+          <div class="col-12">
+            <div class="btn-group" role="group" aria-label="Hierarchical levels">
+              {% for level_key, level_data in hierarchical_chunks.items %}
+              <button type="button" class="btn btn-outline-primary hierarchical-btn" 
+                      data-level="{{ level_key }}" 
+                      {% if level_key == 'level_3' %}data-active="true"{% endif %}>
+                {{ level_key|title }} ({{ level_data.count }})
+              </button>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        {% endif %}
+        
+        <div class="row g-3" id="chunksContainer">
+          {% for chunk in chunks|slice:":6" %}
+          <div class="col-lg-6 col-xl-4 chunk-item" data-level="level_3">
             <div class="card border-0 shadow-sm">
               <div class="card-header">
                 <h6 class="mb-0" style="color: white;">
@@ -134,18 +283,67 @@
                 <small style="color: rgba(255, 255, 255, 0.8);">{{ chunk|length }} characters</small>
               </div>
               <div class="card-body">
-                <p class="card-text" style="font-size: 0.9em; line-height: 1.4;">{{ chunk }}</p>
+                <p class="card-text" style="font-size: 0.9em; line-height: 1.4;">{{ chunk|truncatewords:50 }}{% if chunk|wordcount > 50 %}...<br><small class="text-muted">Click to expand</small>{% endif %}</p>
+                {% if chunk|wordcount > 50 %}
+                <div class="full-text" style="display: none;">
+                  <p class="card-text" style="font-size: 0.9em; line-height: 1.4;">{{ chunk }}</p>
+                </div>
+                {% endif %}
               </div>
             </div>
           </div>
           {% endfor %}
+          
+          {% if chunks|length > 6 %}
+          <div class="col-12 text-center mt-4">
+            <div class="alert alert-light border">
+              <i class="bi bi-info-circle text-primary"></i>
+              <strong>{{ chunks|length|add:"-6" }} additional chunks generated</strong> (showing first 6 chunks)
+            </div>
+          </div>
+          {% endif %}
+          
+          {% if hierarchical_chunks %}
+          <!-- Hidden chunks for other levels -->
+          {% for level_key, level_data in hierarchical_chunks.items %}
+            {% if level_key != 'level_3' %}
+              {% for chunk in level_data.chunks %}
+              <div class="col-lg-6 col-xl-4 chunk-item" data-level="{{ level_key }}" style="display: none;">
+                <div class="card border-0 shadow-sm">
+                  <div class="card-header">
+                    <h6 class="mb-0" style="color: white;">
+                      <i class="bi bi-file-text"></i> {{ level_key|title }} #{{ forloop.counter }}
+                    </h6>
+                    <small style="color: rgba(255, 255, 255, 0.8);">{{ chunk|length }} characters</small>
+                  </div>
+                  <div class="card-body">
+                    <p class="card-text" style="font-size: 0.9em; line-height: 1.4;">{{ chunk|truncatewords:50 }}{% if chunk|wordcount > 50 %}...<br><small class="text-muted">Click to expand</small>{% endif %}</p>
+                    {% if chunk|wordcount > 50 %}
+                    <div class="full-text" style="display: none;">
+                      <p class="card-text" style="font-size: 0.9em; line-height: 1.4;">{{ chunk }}</p>
+                    </div>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+              {% endfor %}
+            {% endif %}
+          {% endfor %}
+          {% endif %}
         </div>
         
         {% else %}
         <!-- Instructions -->
-        <div class="alert alert-primary">
-          <i class="bi bi-info-circle"></i>
-          Upload a file or paste text, then adjust parameters to split into chunks.
+        <div class="alert alert-info">
+          <h6><i class="bi bi-info-circle"></i> Chunking Strategies Explained:</h6>
+          <ul class="mb-0">
+            <li><strong>Fixed-size:</strong> Splits text into chunks of fixed character length with optional overlap</li>
+            <li><strong>Token-based:</strong> Splits based on word count (approximating tokens) with overlap</li>
+            <li><strong>Recursive:</strong> Uses hierarchical separators (paragraphs → sentences → words) for natural breaks</li>
+            <li><strong>Sentence-based:</strong> Groups complete sentences together, preserving natural boundaries</li>
+            <li><strong>Semantic:</strong> Uses AI embeddings to detect topic changes and create meaningful chunks</li>
+            <li><strong>Hierarchical:</strong> Creates multiple granularity levels (sections, subsections, paragraphs)</li>
+          </ul>
         </div>
         {% endif %}
       </div>
@@ -186,12 +384,93 @@
         }
       }
 
+      function toggleChunkingParameters() {
+        const method = document.getElementById('chunkingMethod').value;
+        const allParams = document.querySelectorAll('.chunking-params');
+        const descriptions = {
+          'fixed_size': 'Splits text into chunks of a fixed character size with optional overlap to preserve context.',
+          'token_based': 'Splits text based on token/word count, useful for language models with token limits.',
+          'recursive': 'Uses hierarchical separators (paragraphs, sentences, words) to find natural breakpoints.',
+          'sentence_based': 'Groups complete sentences together, ensuring each chunk contains meaningful units.',
+          'semantic': 'Uses AI embeddings to detect semantic shifts and create topically coherent chunks.',
+          'hierarchical': 'Creates multiple levels of granularity for different use cases (sections, paragraphs, etc.).'
+        };
+        
+        // Hide all parameter sections
+        allParams.forEach(param => param.style.display = 'none');
+        
+        // Show relevant parameters
+        if (method === 'fixed_size' || method === 'recursive') {
+          document.getElementById('fixedSizeParams').style.display = 'block';
+        } else if (method === 'token_based') {
+          document.getElementById('tokenParams').style.display = 'block';
+        } else if (method === 'sentence_based') {
+          document.getElementById('sentenceParams').style.display = 'block';
+        } else if (method === 'semantic') {
+          document.getElementById('semanticParams').style.display = 'block';
+        } else if (method === 'hierarchical') {
+          document.getElementById('hierarchicalParams').style.display = 'block';
+        }
+        
+        // Update description
+        document.getElementById('methodDescription').textContent = descriptions[method] || 'Select a method to see its description.';
+      }
+
       // Initialize on page load
       document.addEventListener('DOMContentLoaded', function() {
         // Set initial state based on server-side value
         const savedMethod = document.getElementById('inputMethodHidden').value;
         document.getElementById('inputMethod').value = savedMethod;
         toggleInputMethod();
+        
+        // Initialize chunking parameters
+        toggleChunkingParameters();
+        
+        // Handle hierarchical level switching
+        const hierarchicalBtns = document.querySelectorAll('.hierarchical-btn');
+        hierarchicalBtns.forEach(btn => {
+          btn.addEventListener('click', function() {
+            const level = this.getAttribute('data-level');
+            
+            // Update button states
+            hierarchicalBtns.forEach(b => {
+              b.classList.remove('active');
+              b.removeAttribute('data-active');
+            });
+            this.classList.add('active');
+            this.setAttribute('data-active', 'true');
+            
+            // Show/hide chunks
+            const allChunks = document.querySelectorAll('.chunk-item');
+            allChunks.forEach(chunk => {
+              if (chunk.getAttribute('data-level') === level) {
+                chunk.style.display = 'block';
+              } else {
+                chunk.style.display = 'none';
+              }
+            });
+          });
+        });
+        
+        // Handle chunk expansion
+        document.addEventListener('click', function(e) {
+          if (e.target.closest('.card-body') && e.target.closest('.chunk-item')) {
+            const cardBody = e.target.closest('.card-body');
+            const fullText = cardBody.querySelector('.full-text');
+            const shortText = cardBody.querySelector('.card-text:not(.full-text .card-text)');
+            
+            if (fullText) {
+              if (fullText.style.display === 'none') {
+                fullText.style.display = 'block';
+                shortText.style.display = 'none';
+              } else {
+                fullText.style.display = 'none';
+                shortText.style.display = 'block';
+              }
+            }
+          }
+        });
       });
+      
     </script>
 {% endblock %}

@@ -14,19 +14,7 @@ class Document(models.Model):
         return self.title
 
 
-class TextChunk(models.Model):
-    """Model to store text chunks with embeddings"""
-    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name='chunks')
-    text = models.TextField()
-    chunk_index = models.IntegerField()
-    embedding = models.JSONField()  # Store embedding as JSON array
-    created_at = models.DateTimeField(auto_now_add=True)
-    
-    class Meta:
-        ordering = ['chunk_index']
-    
-    def __str__(self):
-        return f"Chunk {self.chunk_index} of {self.document.title}"
+# TextChunk model removed - now using ChromaDB for vector storage
 
 
 class ChatSession(models.Model):
