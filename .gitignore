@@ -47,6 +47,13 @@ static/
 *.swo
 *~
 
+# Vector Database Storage
+chroma_storage/
+.chroma/
+
+# Test
+test/
+
 # OS
 .DS_Store
 .DS_Store?
